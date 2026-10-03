@@ -1,0 +1,4 @@
+esphome==2026.8.0
+# Desktop API/download tools use the versions bundled with ESPHome.
+aioesphomeapi
+PyYAML

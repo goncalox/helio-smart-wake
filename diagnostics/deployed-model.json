@@ -1,0 +1,80 @@
+{
+  "model": "class-balanced multinomial logistic regression",
+  "classes": [
+    "Light",
+    "Deep",
+    "REM",
+    "Awake"
+  ],
+  "feature_names": [
+    "heart_rate",
+    "hr_mean_5m",
+    "hr_sd_5m",
+    "intensity_mean_5m",
+    "steps_5m"
+  ],
+  "movement_transform": "log1p",
+  "mean": [
+    53.65934065934066,
+    53.68791208791209,
+    1.2404276728679182,
+    0.7465379901029647,
+    0.05777467441788771
+  ],
+  "scale": [
+    2.902139340569829,
+    2.7024138645973843,
+    1.079997283995856,
+    0.8315065209481277,
+    0.3171393615586189
+  ],
+  "weights": [
+    [
+      0.5302533196795963,
+      -0.0742470075334105,
+      -0.13944489331465557,
+      -0.15472175168517494,
+      0.09170262013765414,
+      0.09072489536196654
+    ],
+    [
+      0.33583213237661924,
+      0.0028760022488425923,
+      0.05947327537367541,
+      -0.4820191902948838,
+      -0.40458305578568066,
+      -0.039171857428024495
+    ],
+    [
+      0.5204101494929886,
+      -0.14051915073195437,
+      0.028986574907598324,
+      -0.038640405682850903,
+      -0.07122239777902786,
+      0.07108686190219703
+    ],
+    [
+      -1.386495601549204,
+      0.2118901560165222,
+      0.05098504303338176,
+      0.6753813476629094,
+      0.3841028334270543,
+      -0.12263989983613902
+    ]
+  ],
+  "regularization": 0.2,
+  "iterations": 1200,
+  "learning_rate": 0.08,
+  "calibrated": false,
+  "alarm_control": "additional early-wake gate",
+  "training_night": "2026-10-03",
+  "training_observations": 91,
+  "validation": "one-night block comparison only",
+  "model_version": "20261003-v1",
+  "require_strap_light": true,
+  "full_target_alarm_retained": true,
+  "hard_deadline": false,
+  "recorded_sample_max_age_seconds": 180,
+  "read_max_age_seconds": 90,
+  "sample_alignment_seconds": 60
+}

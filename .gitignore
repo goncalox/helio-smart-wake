@@ -1,0 +1,30 @@
+# Credentials and local settings
+secrets.yaml
+secrets.*.yaml
+!secrets.example.yaml
+.env
+.env.*
+*.pem
+*.key
+*.private.yaml
+# Generated firmware and test artifacts
+.esphome/
+.test-build/
+.venv/
+build/
+__pycache__/
+*.pyc
+*.bin
+*.elf
+*.map
+*.dylib
+*.so
+# Private overnight records and backups
+work/
+logs/
+data/
+backups/
+*.log
+*.jsonl
+*.csv
+.DS_Store

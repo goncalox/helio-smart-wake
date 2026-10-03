@@ -1,0 +1,290 @@
+# Include this package in the existing helio-bridge.yaml.
+# Device Builder saved the Helio secrets with a per-device prefix.
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [helio_bridge]
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: true
+    interval: 320ms
+    window: 160ms
+
+ble_client:
+  - mac_address: !secret helio_bridge__helio_mac
+    id: helio_ble
+    auto_connect: true
+
+helio_bridge:
+  id: helio
+  ble_client_id: helio_ble
+  auth_key: !secret helio_bridge__helio_auth_key
+  status:
+    name: Helio Connection Test
+  battery:
+    id: helio_strap_battery
+    name: Helio Battery
+    on_value:
+      then:
+        - lambda: id(helio_battery_seen) = millis();
+  alarm_status:
+    name: Helio Alarm Status
+  time_id: helio_clock
+  diagnostic_status:
+    name: Helio Onboard Log Status
+  sleep_status:
+    name: Helio Sleep Data Status
+  sleep_stage:
+    name: Helio Last Recorded Sleep Stage
+  sleep_through:
+    name: Helio Sleep Data Through
+  sleep_onset:
+    name: Helio Recorded Sleep Start
+  sleep_sync:
+    name: Helio Last Sleep Read
+  sleep_changed:
+    name: Helio Sleep Record Last Changed
+  sleep_age:
+    name: Helio Sleep Data Age
+  sleep_duration:
+    name: Helio Recorded Sleep Duration
+  sleep_records:
+    name: Helio Sleep Records Read
+  model_stage:
+    name: Helio Model Sleep Stage
+  smart_status:
+    name: Helio Smart Wake Status
+  smart_alarm:
+    name: Helio Smart Wake Saved Alarm
+  smart_target:
+    name: Helio Smart Wake Target
+  smart_awake:
+    name: Helio Awake Time Added
+  sleep_awake:
+    name: Helio Recorded Awake Time
+
+time:
+  - platform: sntp
+    id: helio_clock
+    timezone: Europe/Lisbon
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+      - 2.pool.ntp.org
+    on_time_sync:
+      then:
+        - lambda: |-
+            id(helio).diagnostic_event("NTP clock synchronized");
+            id(helio_clock_sync).publish_state(id(helio_clock).utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"));
+        - logger.log: "Helio clock synchronized directly via NTP"
+
+text_sensor:
+  - platform: template
+    name: Helio Strap Link
+    id: helio_strap_link
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: return std::string(id(helio).connection_label(millis()));
+  - platform: template
+    id: helio_clock_sync
+    name: Helio Last Clock Sync
+    device_class: timestamp
+    entity_category: diagnostic
+    update_interval: never
+
+datetime:
+  - platform: template
+    type: time
+    id: helio_alarm_time
+    name: Helio Alarm Time
+    optimistic: true
+    restore_value: true
+    initial_value: "07:00:00"
+
+number:
+  - platform: template
+    id: helio_sleep_target
+    name: Helio Sleep Target
+    unit_of_measurement: h
+    min_value: 6
+    max_value: 10
+    step: 0.25
+    optimistic: true
+    restore_value: true
+    initial_value: 8.5
+    mode: box
+  - platform: template
+    id: helio_early_window
+    name: Helio Light Sleep Window
+    unit_of_measurement: min
+    min_value: 0
+    max_value: 30
+    step: 5
+    optimistic: true
+    restore_value: true
+    initial_value: 15
+    mode: box
+
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          id(helio).tick_smart(id(helio_sleep_target).state, int(id(helio_early_window).state));
+
+select:
+  - platform: template
+    id: helio_alarm_repeat
+    name: Helio Alarm Repeat
+    optimistic: true
+    restore_value: true
+    initial_option: Once
+    options:
+      - Once
+      - Every day
+      - Weekdays
+      - Weekends
+
+api:
+  # Keep the alarm controller running when Home Assistant is offline.
+  reboot_timeout: 0s
+  actions:
+    - action: helio_download_diagnostics
+      variables:
+        sequence: int
+      then:
+        - lambda: id(helio).download_diagnostics(sequence);
+    - action: helio_set_alarm
+      variables:
+        hour: int
+        minute: int
+        repeat_mask: int
+      then:
+        - lambda: id(helio).set_alarm(hour, minute, repeat_mask);
+    - action: helio_cancel_alarm
+      then:
+        - lambda: id(helio).cancel_alarm();
+    - action: helio_read_sleep
+      then:
+        - lambda: id(helio).read_sleep();
+
+button:
+  - platform: template
+    name: Test Helio Connection
+    on_press:
+      - lambda: id(helio).test_connection();
+  - platform: template
+    name: Set Helio Alarm
+    on_press:
+      - lambda: |-
+          const auto repeat = id(helio_alarm_repeat).current_option();
+          const int mask = repeat == "Every day" ? 127 : repeat == "Weekdays" ? 31 : repeat == "Weekends" ? 96 : 0;
+          id(helio).set_alarm(id(helio_alarm_time).hour, id(helio_alarm_time).minute, mask);
+  - platform: template
+    name: Cancel Helio Alarm
+    on_press:
+      - lambda: id(helio).cancel_alarm();
+  - platform: template
+    name: Read Helio Sleep Data
+    on_press:
+      - lambda: id(helio).read_sleep();
+
+switch:
+  - platform: template
+    id: helio_smart_wake
+    name: Helio Smart Wake
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: id(helio).set_smart_enabled(true);
+    turn_off_action:
+      - lambda: id(helio).set_smart_enabled(false);
+  - platform: template
+    name: Helio Sleep Monitoring
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(helio).set_sleep_monitoring(true);
+    turn_off_action:
+      - lambda: id(helio).set_sleep_monitoring(false);
+
+# Waveshare's onboard 135x240 LCD, rotated for a readable 240x135 layout.
+psram:
+  mode: quad
+  speed: 40MHz
+
+spi:
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+
+output:
+  - platform: ledc
+    id: helio_backlight_pwm
+    pin: GPIO7
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    id: helio_screen_light
+    name: Helio Screen Brightness
+    output: helio_backlight_pwm
+    gamma_correct: 1.0
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - delay: 1s
+      - light.turn_on:
+          id: helio_screen_light
+          brightness: 10%
+
+globals:
+  - id: helio_battery_seen
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+
+font:
+  - file: "gfonts://Roboto"
+    id: helio_screen_label
+    size: 16
+  - file: "gfonts://Roboto"
+    id: helio_screen_value
+    size: 48
+    glyphs: "0123456789% -"
+  - file: "gfonts://Roboto"
+    id: helio_screen_detail
+    size: 13
+
+display:
+  - platform: mipi_spi
+    model: WAVESHARE-ESP32-S3-GEEK
+    id: helio_screen
+    rotation: 90
+    color_depth: 16
+    update_interval: 5s
+    lambda: |-
+      const Color white(230, 235, 240), grey(140, 150, 162);
+      const bool known = id(helio_strap_battery).has_state() && std::isfinite(id(helio_strap_battery).state);
+      const float battery = known ? id(helio_strap_battery).state : 0;
+      const uint32_t age = known ? (millis() - id(helio_battery_seen)) / 60000 : 0;
+      const Color accent = !known || age >= 15 ? grey : battery <= 10 ? Color(245, 85, 75) :
+          battery <= 20 ? Color(240, 180, 70) : Color(100, 210, 170);
+      it.print(16, 10, id(helio_screen_label), grey, "HELIO STRAP");
+      it.rectangle(201, 13, 22, 11, accent);
+      it.filled_rectangle(223, 16, 3, 5, accent);
+      if (known) it.filled_rectangle(203, 15, int(18 * battery / 100), 7, accent);
+      if (known) it.printf(120, 29, id(helio_screen_value), white, TextAlign::TOP_CENTER, "%.0f%%", battery);
+      else it.print(120, 29, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--%");
+      const auto link = id(helio).connection_indicator(millis());
+      const Color link_color = link == 2 ? Color(100, 210, 170) : link == 1 ? Color(100, 165, 235) :
+          link == 3 ? Color(240, 180, 70) : link == 4 ? Color(245, 85, 75) : grey;
+      it.filled_circle(20, 100, 4, link_color);
+      it.print(31, 91, id(helio_screen_detail), link_color, id(helio).connection_label(millis()));
+      if (!known) it.print(16, 112, id(helio_screen_detail), grey, "Battery not received yet");
+      else if (age == 0) it.print(16, 112, id(helio_screen_detail), grey, "Battery updated just now");
+      else it.printf(16, 112, id(helio_screen_detail), grey, "Battery last read %um ago", unsigned(age));
