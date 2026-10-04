@@ -120,7 +120,7 @@ number:
     name: Helio Light Sleep Window
     unit_of_measurement: min
     min_value: 0
-    max_value: 30
+    max_value: 60
     step: 5
     optimistic: true
     restore_value: true

@@ -90,7 +90,9 @@ int main() {
   assert(target(s)==day+24*3600+30*60);
   assert(!elapsed(s,day+18*3600));
   assert(desired(s,record,day+19*3600,0)==target(s));
-  s.settings.early_minutes = 31;
+  s.settings.early_minutes = 60;
+  assert(s.settings.valid());
+  s.settings.early_minutes = 61;
   assert(!s.settings.valid());
   std::cout << "Smart wake: no fallback, night/nap selection, freshness, uncapped duration, early window, uncertain writes and past-time guards passed\n";
 }

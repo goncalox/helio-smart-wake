@@ -8,11 +8,12 @@
 namespace esphome::helio_bridge::smart_wake {
 constexpr uint32_t WRITE_MARGIN = 120;
 constexpr uint32_t STAGE_MAX_AGE = 180;
+constexpr uint16_t MAX_EARLY_MINUTES = 60;
 struct Settings {
   uint16_t duration_minutes{510}, early_minutes{15};
   uint8_t migration_pending{0}, reserved{0};
   bool valid() const {
-    return duration_minutes >= 360 && duration_minutes <= 600 && early_minutes <= 30;
+    return duration_minutes >= 360 && duration_minutes <= 600 && early_minutes <= MAX_EARLY_MINUTES;
   }
 };
 // One dated night, independent of the time-only alarm stored on the strap.

@@ -177,8 +177,8 @@ void HelioBridge::tick_smart(float hours, int early_minutes) {
   // A cancelled, disabled session can be re-enabled before its wake time passed.
   if (smart_session_.finished == 2 && !smart_session_.manual_override && !smart_session_.cancel_pending)
     smart_session_ = {};
-  if (!std::isfinite(hours) || hours < 6 || hours > 10 || early_minutes < 0 || early_minutes > 30) {
-    smart_status_("Invalid settings: target 6-10h, window 0-30min"); return;
+  if (!std::isfinite(hours) || hours < 6 || hours > 10 || early_minutes < 0 || early_minutes > smart_wake::MAX_EARLY_MINUTES) {
+    smart_status_("Invalid settings: target 6-10h, window 0-60min"); return;
   }
   if (smart_session_.session_end && !smart_session_.finished && smart_wake::elapsed(smart_session_, now)) {
     smart_session_.finished = 1;

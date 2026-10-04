@@ -39,6 +39,11 @@ int main() {
  // Unknown-clock migration persists until a clock is available, including another reboot.
  old.version=1;old.awake_minutes=65535;seed(old);HelioBridge no_clock;no_clock.setup_smart_();no_clock.tick();assert(no_clock.smart_session_.settings.migration_pending && no_clock.smart_session_.awake_minutes==0);
  HelioBridge later;later.clock_->now=at(10,4,6);later.setup_smart_();later.smart_enabled_=true;later.tick();assert(!later.smart_session_.settings.migration_pending);
+ // Accept and persist the wider setting; reject a window beyond the supported maximum.
+ persisted.clear();HelioBridge wide;wide.clock_->now=at(10,4,18);wide.setup_smart_();wide.smart_enabled_=true;wide.tick_smart(8.5,60);
+ assert(wide.smart_session_.settings.early_minutes==60 && wide.writes==0);
+ HelioBridge wide_reboot;wide_reboot.clock_->now=at(10,4,19);wide_reboot.setup_smart_();assert(wide_reboot.smart_session_.settings.early_minutes==60);
+ wide.tick_smart(8.5,61);assert(wide.smart_message_.find("window 0-60min")!=std::string::npos && wide.writes==0);
  // Local date windows follow DST without imposing a wake limit.
  for(int month:{3,10}) { persisted.clear();HelioBridge d;int day=month==3?28:24;d.clock_->now=at(month,day,18);d.setup_smart_();d.smart_enabled_=true;d.tick();assert(d.smart_session_.session_end==at(month,day+1,18));assert(d.smart_session_.session_end-d.smart_session_.night_start==(month==3?23:25)*3600U);assert(d.writes==0); }
  std::cout<<"Production controller: no fallback, targets after 10, compensation, early window, reboot, rollover, cancellation, migration/manual ownership and DST passed\n";

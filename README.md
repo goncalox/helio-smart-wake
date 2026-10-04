@@ -25,8 +25,9 @@ Once successfully saved, an alarm runs on the strap itself.
 
 Factory defaults are **8.5 hours**, a **15-minute early window**, smart wake
 **off**, and sleep monitoring **on**.
-The existing installation uses a saved **30-minute window** with smart wake on;
+The existing installation uses a saved **60-minute window** with smart wake on;
 saved settings override defaults and are not stored in this repository.
+The early-window control accepts **0–60 minutes** in five-minute steps.
 The configured timezone is `Europe/Lisbon`; edit `helio-test.yaml` for another zone.
 
 ## Setup
