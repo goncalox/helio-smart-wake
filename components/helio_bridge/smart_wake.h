@@ -49,7 +49,7 @@ inline uint32_t desired_alarm(const Session &s, const sleep_data::Snapshot &data
   if (s.attempted && s.attempted != s.confirmed) return s.attempted;
   if (s.early_selected) return s.attempted;
   const auto normal = target(s);
-  if (light_window(s, now) && model.light_ready(now, data.through) && fresh(data, now) && data.accounting_complete && data.stage == 4 && !data.is_nap &&
+  if (light_window(s, now) && model.wake_ready(now, data.through) && fresh(data, now) && data.accounting_complete && stage_model::wake_stage(data.stage) && !data.is_nap &&
       data.awake_minutes == s.awake_minutes &&
       data.onset == s.onset && read_at <= now && now - read_at <= 90) {
     const auto early = minute_ceiling(now + WRITE_MARGIN);

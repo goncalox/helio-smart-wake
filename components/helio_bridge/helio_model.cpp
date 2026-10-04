@@ -25,20 +25,20 @@ void HelioBridge::log_early_gate_(uint32_t now, uint32_t desired) {
   if(smart_wake::fresh(smart_snapshot_,now)) flags|=1;
   if(smart_read_at_<=now && now-smart_read_at_<=90) flags|=2;
   if(model_prediction_.valid) flags|=4;
-  if(model_prediction_.light_ready(now,smart_snapshot_.through)) flags|=8;
+  if(model_prediction_.wake_ready(now,smart_snapshot_.through)) flags|=8;
   const uint32_t target=smart_wake::target(smart_session_);
   if(desired && desired<target) flags|=16;
   if(gate_logged_through_==smart_snapshot_.through && gate_logged_model_read_==model_prediction_.read_at &&
       gate_logged_target_==target && gate_logged_desired_==desired && gate_logged_flags_==flags) return;
   gate_logged_through_=smart_snapshot_.through;gate_logged_model_read_=model_prediction_.read_at;
   gate_logged_target_=target;gate_logged_desired_=desired;gate_logged_flags_=flags;
-  uint8_t record[24]={1,smart_snapshot_.stage,model_prediction_.stage,flags};
+  uint8_t record[24]={2,smart_snapshot_.stage,model_prediction_.stage,flags};
   protocol::write32(record+4,smart_snapshot_.through);
   protocol::write32(record+8,model_prediction_.sample_time);
   protocol::write32(record+12,model_prediction_.read_at);
   protocol::write32(record+16,target);protocol::write32(record+20,desired);
   diagnostic_append_(12,record,sizeof(record));
-  ESP_LOGI("helio_model", "Early gate: strap=%s model=%s model_light_ready=%u decision=%s",
+  ESP_LOGI("helio_model", "Early gate: strap=%s model=%s model_wake_ready=%u decision=%s",
       sleep_data::stage_name(smart_snapshot_.stage),model_prediction_.valid ? sleep_data::stage_name(model_prediction_.stage) : "Unavailable",
       !!(flags&8),flags&16 ? "save earlier alarm" : "retain full target");
 }

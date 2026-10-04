@@ -48,13 +48,16 @@ def decode_blob(blob, sequence):
                         features=dict(zip(('heart_rate','hr_mean_5m','hr_sd_5m','intensity_mean_5m','steps_5m'),values[:5])),
                         scores=dict(zip(('Light','Deep','REM','Awake'),values[5:])))
         elif kind == 12:
-            if size != 24 or payload[0] != 1: raise ValueError('unknown early gate layout')
+            if size != 24 or payload[0] not in (1,2): raise ValueError('unknown early gate layout')
             fields=struct.unpack_from('<5I',payload,4); flags=payload[3]
             names=('band_through','model_sample_time','model_read_at','target','desired')
             item.update(kind='early_gate',strap_stage={4:'Light',5:'Deep',8:'REM',7:'Awake'}.get(payload[1],'Unknown'),
                         model_stage={4:'Light',5:'Deep',8:'REM',7:'Awake'}.get(payload[2],'Unknown'),
                         band_fresh=bool(flags&1),band_read_fresh=bool(flags&2),model_valid=bool(flags&4),
-                        model_light_ready=bool(flags&8),earlier_alarm_selected=bool(flags&16),**dict(zip(names,fields)))
+                        model_wake_ready=bool(flags&8),earlier_alarm_selected=bool(flags&16),
+                        gate_policy='both-Light' if payload[0]==1 else 'both-Light-or-Awake',
+                        **dict(zip(names,fields)))
+            if payload[0]==1: item['model_light_ready']=bool(flags&8)
         elif kind == 9:
             item.update(kind="activity", **decode_activity(payload))
         elif kind == 6:

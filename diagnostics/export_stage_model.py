@@ -23,14 +23,15 @@ text+='inline constexpr std::array<double,5> MEAN = '+array(m['mean'])+';\n'
 text+='inline constexpr std::array<double,5> SCALE = '+array(m['scale'])+';\n'
 text+='inline constexpr double WEIGHTS[4][6] = {'+',\n'.join(array(w) for w in m['weights'])+'};\n'
 text+='''inline constexpr uint8_t STAGES[4] = {4,5,8,7};
+inline constexpr bool wake_stage(uint8_t stage) { return stage == 4 || stage == 7; }
 struct Prediction {
   bool valid{false}; uint8_t stage{0}, reason{1}, heart_rate_samples{0};
   uint32_t sample_time{0}, read_at{0};
   std::array<double,5> features{};
   std::array<double,4> scores{};
-  bool light_ready(uint32_t now, uint32_t band_through) const {
+  bool wake_ready(uint32_t now, uint32_t band_through) const {
     const int64_t alignment = int64_t(band_through) - (int64_t(sample_time) + 60);
-    return valid && stage == 4 && sample_time <= now && now-sample_time <= 180 &&
+    return valid && wake_stage(stage) && sample_time <= now && now-sample_time <= 180 &&
         read_at <= now && now-read_at <= 90 && band_through && alignment >= -60 && alignment <= 60;
   }
 };

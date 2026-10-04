@@ -14,6 +14,7 @@ static const char *const TAG = "helio_bridge";
 
 void HelioBridge::setup() {
   diagnostic_setup_();
+  diagnostic_text_(8, "Early wake policy: both sources Light or Awake");
   this->parent()->set_enabled(false);
   const auto address = this->parent()->get_address();
   alarm_pref_ = global_preferences->make_preference<alarms::Owned>(0x48454c32U ^ uint32_t(address) ^ uint32_t(address >> 32));

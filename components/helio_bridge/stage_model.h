@@ -15,14 +15,15 @@ inline constexpr double WEIGHTS[4][6] = {{0.53025331967959632, -0.07424700753341
 {0.52041014949298858, -0.14051915073195437, 0.028986574907598324, -0.038640405682850903, -0.071222397779027863, 0.071086861902197027},
 {-1.386495601549204, 0.2118901560165222, 0.050985043033381763, 0.67538134766290936, 0.38410283342705431, -0.12263989983613902}};
 inline constexpr uint8_t STAGES[4] = {4,5,8,7};
+inline constexpr bool wake_stage(uint8_t stage) { return stage == 4 || stage == 7; }
 struct Prediction {
   bool valid{false}; uint8_t stage{0}, reason{1}, heart_rate_samples{0};
   uint32_t sample_time{0}, read_at{0};
   std::array<double,5> features{};
   std::array<double,4> scores{};
-  bool light_ready(uint32_t now, uint32_t band_through) const {
+  bool wake_ready(uint32_t now, uint32_t band_through) const {
     const int64_t alignment = int64_t(band_through) - (int64_t(sample_time) + 60);
-    return valid && stage == 4 && sample_time <= now && now-sample_time <= 180 &&
+    return valid && wake_stage(stage) && sample_time <= now && now-sample_time <= 180 &&
         read_at <= now && now-read_at <= 90 && band_through && alignment >= -60 && alignment <= 60;
   }
 };

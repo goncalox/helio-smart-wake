@@ -73,3 +73,16 @@ decoded = decode_blob(blob,77)
 assert decoded[0]['stage']=='Light' and decoded[0]['features']['heart_rate']==52
 assert decoded[1]['earlier_alarm_selected'] and decoded[1]['model_light_ready']
 print('300 synthetic Python/C++ feature/score/class parity checks, frozen export and log decoding passed.')
+
+# Version 2 gate records distinguish Light-or-Awake policy from legacy Light-only records.
+gate2=bytes([2,7,4,31])+struct.pack('<5I',1060,1000,1067,2000,1187)
+raw2=struct.pack('<BIIH',12,1067,123,24)+gate2
+packed2=bytearray()
+for value in raw2: packed2.extend(bytes([value]) if value else bytes([0,1]))
+blob2=struct.pack('<4sIII',b'HLG2',78,len(raw2),zlib.crc32(raw2))+packed2
+new=decode_blob(blob2,78)[0]
+assert new['strap_stage']=='Awake' and new['model_stage']=='Light'
+assert new['model_wake_ready'] and new['gate_policy']=='both-Light-or-Awake'
+assert 'model_light_ready' not in new
+assert decoded[1]['gate_policy']=='both-Light' and decoded[1]['model_light_ready']
+print('Legacy and Light-or-Awake gate policies decode distinctly.')

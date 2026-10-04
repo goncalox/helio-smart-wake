@@ -83,7 +83,7 @@ void HelioBridge::smart_result_(bool success) {
     smart_status_(smart_enabled_ ? "Previous smart alarm removed; sleep-based scheduling active" : "Smart wake off; alarm cancellation verified");
   } else {
     smart_session_.confirmed = smart_session_.attempted;
-    smart_status_(smart_session_.early_selected ? "Both report light; earlier alarm saved and verified" :
+    smart_status_(smart_session_.early_selected ? "Both report light or awake; earlier alarm saved and verified" :
                   smart_session_.onset ? "Sleep-based alarm saved and verified" : "Sleep-based alarm saved and verified");
   }
   save_smart_();
@@ -215,7 +215,7 @@ void HelioBridge::tick_smart(float hours, int early_minutes) {
     smart_session_.attempted = desired;
     if (!save_smart_()) return;
     const auto local = ESPTime::from_epoch_local(desired);
-    smart_status_(smart_session_.early_selected ? "Both report light; saving earlier alarm" : "Saving smart wake alarm");
+    smart_status_(smart_session_.early_selected ? "Both report light or awake; saving earlier alarm" : "Saving smart wake alarm");
     smart_dispatch_ = true;
     set_alarm(local.hour, local.minute, 0);
     smart_dispatch_ = false;

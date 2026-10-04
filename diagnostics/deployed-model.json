@@ -71,10 +71,15 @@
   "training_observations": 91,
   "validation": "one-night block comparison only",
   "model_version": "20261003-v1",
-  "require_strap_light": true,
   "full_target_alarm_retained": true,
   "hard_deadline": false,
   "recorded_sample_max_age_seconds": 180,
   "read_max_age_seconds": 90,
-  "sample_alignment_seconds": 60
+  "sample_alignment_seconds": 60,
+  "accepted_early_wake_stages": [
+    "Light",
+    "Awake"
+  ],
+  "require_both_sources": true,
+  "early_wake_policy": "both-Light-or-Awake"
 }

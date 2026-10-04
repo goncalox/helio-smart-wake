@@ -16,10 +16,11 @@ Once successfully saved, an alarm runs on the strap itself.
 - There is no fixed clock-time deadline and no automatically created clock-time
   fallback before onset is established.
 - During the early window, choose an earlier alarm only when both the strap and
-  the experimental model report fresh, aligned Light sleep.
+  the experimental model report fresh, aligned **Light or Awake**. Mixed pairs
+  qualify too; no repeated Awake readings are required.
 - Schedule that alarm at least two minutes ahead, round to a minute, verify it
   by reading it back, and keep it fixed for that night.
-- If either source disagrees, is missing or is stale, keep the full-target alarm.
+- If either source reports Deep or REM, is invalid, missing or stale, keep the full-target alarm.
 - Preserve other Zepp alarms; manual bridge controls take precedence for the night.
 - Settings, alarm ownership and dated night state survive restarts.
 
@@ -117,7 +118,7 @@ The inputs are device-processed minute summaries, not raw optical or motion wave
 
 Predictions require five contiguous minute rows, at least three valid heart rates
 and a valid latest heart rate while worn.
-For early waking, both samples must be no more than three minutes old, both reads
+For early waking, each source must report Light or Awake, and both samples must be no more than three minutes old, both reads
 no more than 90 seconds old, and the sample intervals aligned within one minute.
 
 The model was developed using one night and later strap labels, with only within-night
@@ -134,7 +135,7 @@ Run `python tests/run.py` with Python 3.10+, a C/C++ compiler, OpenSSL with
 `sect163r2` support, and the desktop dependencies.
 The tests run locally without contacting or flashing any device.
 They cover alarm ownership, protocol framing, sleep/awake accounting, data transfer
-validation, dated sessions and legacy migration, DST, the dual-Light gate, causal
+validation, dated sessions and legacy migration, DST, the Light-or-Awake gate, causal
 features, fixed Python/C++ inference parity and rolling log integrity.
 Synthetic fixtures are included; private overnight recordings are not.
 

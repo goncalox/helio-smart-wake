@@ -10,7 +10,18 @@ int main() {
  stage_model::Prediction p;p.valid=true;p.stage=4;p.sample_time=now-60;p.read_at=now;
  auto desired=[&](){return smart_wake::desired_alarm(s,b,now,now,p);};
  assert(desired()==now+120);
- p.stage=5;assert(desired()==target);p.stage=8;assert(desired()==target);p.stage=7;assert(desired()==target);
+ p.stage=5;assert(desired()==target);p.stage=8;assert(desired()==target);p.stage=7;assert(desired()==now+120);
+ // All four Light/Awake pairs are accepted by one fresh observation.
+ for(uint8_t band:{uint8_t(4),uint8_t(7)}) for(uint8_t model:{uint8_t(4),uint8_t(7)}) {
+  b.stage=band;p.stage=model;assert(desired()==now+120);
+  p.read_at=now-91;assert(desired()==target);p.read_at=now;
+ }
+ // Deep, REM or unknown on either source still keeps the full target.
+ for(uint8_t bad:{uint8_t(5),uint8_t(8),uint8_t(0)}) {
+  b.stage=7;p.stage=bad;assert(desired()==target);
+  b.stage=bad;p.stage=7;assert(desired()==target);
+ }
+ b.stage=4;p.stage=4;
  p.stage=4;p.valid=false;assert(desired()==target);p.valid=true;
  p.read_at=now-91;assert(desired()==target);p.read_at=now;
  p.sample_time=now-181;assert(desired()==target);p.sample_time=now+1;assert(desired()==target);
@@ -42,5 +53,5 @@ int main() {
  for(int i=0;i<3;i++)raw[i*8+3]=255;
  assert(!stage_model::from_records(raw,40,now-300,now).valid);
  assert(!stage_model::from_records(raw,32,now-300,now).valid);
- std::cout<<"Dual gate: both light, disagreement, missing/stale/future/unaligned inputs, nap/accounting exclusion, full-target retention and locked alarm checks passed\n";
+ std::cout<<"Dual gate: light/awake pairs, deep/REM exclusion, missing/stale/future/unaligned inputs, nap/accounting exclusion, full-target retention and locked alarm checks passed\n";
 }
