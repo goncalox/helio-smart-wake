@@ -9,11 +9,11 @@ int main() {
  sleep_data::Snapshot b{};b.valid=true;b.accounting_complete=true;b.onset=s.onset;b.through=now;b.stage=4;
  stage_model::Prediction p;p.valid=true;p.stage=4;p.sample_time=now-60;p.read_at=now;
  auto desired=[&](){return smart_wake::desired_alarm(s,b,now,now,p);};
- assert(desired()==now+120);
- p.stage=5;assert(desired()==target);p.stage=8;assert(desired()==target);p.stage=7;assert(desired()==now+120);
+ assert(desired()==now+60);
+ p.stage=5;assert(desired()==target);p.stage=8;assert(desired()==target);p.stage=7;assert(desired()==now+60);
  // All four Light/Awake pairs are accepted by one fresh observation.
  for(uint8_t band:{uint8_t(4),uint8_t(7)}) for(uint8_t model:{uint8_t(4),uint8_t(7)}) {
-  b.stage=band;p.stage=model;assert(desired()==now+120);
+  b.stage=band;p.stage=model;assert(desired()==now+60);
   p.read_at=now-91;assert(desired()==target);p.read_at=now;
  }
  // Deep, REM or unknown on either source still keeps the full target.
@@ -34,15 +34,15 @@ int main() {
  // End-of-window alarm remains even when the model disagrees.
  p.stage=5;assert(desired()==target);
  s.settings.early_minutes=0;p.stage=4;assert(desired()==target);
- s.settings.early_minutes=30;s.confirmed=s.attempted=now+120;s.early_selected=1;p.valid=false;
- assert(desired()==now+120); // A saved alarm remains locked, not repeatedly moved.
+ s.settings.early_minutes=30;s.confirmed=s.attempted=now+60;s.early_selected=1;p.valid=false;
+ assert(desired()==now+60); // A saved alarm remains locked, not repeatedly moved.
  // A 60-minute window opens an hour before target, while still requiring both Light inputs.
  s={};s.onset=now-8*3600;s.night_start=s.onset-4*3600;s.session_end=now+8*3600;s.settings.early_minutes=60;
  b={};b.valid=true;b.accounting_complete=true;b.onset=s.onset;b.stage=4;
  const uint32_t wide_target=smart_wake::target(s), opens=wide_target-3600;
  assert(!smart_wake::light_window(s,opens-1) && smart_wake::light_window(s,opens));
  const uint32_t middle=wide_target-45*60;b.through=middle;p.valid=true;p.stage=4;p.sample_time=middle-60;p.read_at=middle;
- assert(smart_wake::desired_alarm(s,b,middle,middle,p)==smart_wake::minute_ceiling(middle+120));
+ assert(smart_wake::desired_alarm(s,b,middle,middle,p)==smart_wake::minute_ceiling(middle+30));
  p.stage=5;assert(smart_wake::desired_alarm(s,b,middle,middle,p)==wide_target);
  assert(!smart_wake::light_window(s,wide_target));
  // Latest HR must be valid and the strap worn, independent of the model classification.

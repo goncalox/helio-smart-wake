@@ -22,6 +22,9 @@ namespace text_sensor { struct TextSensor {void publish_state(const char*){}}; }
 class HelioBridge { public:
  bool smart_enabled_=false; smart_wake::Session smart_session_{};
  stage_model::Prediction model_prediction_{}; text_sensor::TextSensor *model_stage_sensor_=nullptr;
+ smart_wake::Wear wear_{};
+ bool following=false;
+ bool follow_monitoring_(uint32_t) const { return following; }
  int model_calls=0;
  void update_model_(const uint8_t*,size_t,uint32_t){++model_calls;}
  enum class Phase { IDLE, SLEEP_ACK, ACTIVITY_START, ACTIVITY_DATA, ACTIVITY_ACK, CLOSING };
@@ -35,7 +38,7 @@ class HelioBridge { public:
  void close_(){phase_=Phase::CLOSING;}
  void send_(uint16_t endpoint,const std::vector<uint8_t>& p,bool) { assert(endpoint==0x4b); sent=p; }
  void diagnostic_text_(int k,const char* p) { assert(k==10); status=p; }
- void diagnostic_append_(int k,const uint8_t*p,size_t n) { assert(k==9);recorded.assign(p,p+n); }
+ void diagnostic_append_(int k,const uint8_t*p,size_t n) { if(k==9)recorded.assign(p,p+n); }
 };
 }
 '''
@@ -56,6 +59,7 @@ int main() {
  assert(!a.begin_activity_()); // At most every four minutes, even if sleep polls faster.
  a.smart_enabled_=true;a.smart_session_.onset=a.clock_->utcnow().timestamp-8*3600;a.smart_session_.settings.early_minutes=30;
  fake_ms+=61000;assert(a.begin_activity_()); // Model reads refresh every minute in the early window.
+ a.smart_enabled_=false;a.following=true;fake_ms+=61000;assert(a.begin_activity_()); // Post-alarm worn monitoring also refreshes every minute.
  HelioBridge b; assert(b.begin_activity_()); b.activity_control_(header);
  data[0]=1; b.activity_bulk_(data,9); assert(b.recorded.empty() && b.model_calls==0 && b.phase_==HelioBridge::Phase::CLOSING);
  HelioBridge c; assert(c.begin_activity_()); c.activity_control_(header);

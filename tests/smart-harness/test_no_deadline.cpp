@@ -3,7 +3,7 @@
 #include <iostream>
 using namespace esphome; using namespace esphome::helio_bridge;
 uint32_t at(int mon,int day,int h,int m=0) { ESPTime t{2026,mon,day,h,m,0,0}; t.recalc_timestamp_local(); return t.timestamp; }
-void seed(const smart_wake::Session &s) { persisted.assign((const uint8_t*)&s,(const uint8_t*)&s+sizeof(s)); }
+void seed(const smart_wake::Session &s) { extra_persisted.clear(); persisted.assign((const uint8_t*)&s,(const uint8_t*)&s+sizeof(s)); }
 int main() {
  setenv("TZ","Europe/Lisbon",1);tzset();
  HelioBridge b;b.clock_->now=at(10,3,18);b.setup_smart_();b.smart_enabled_=true;b.tick();
@@ -20,11 +20,11 @@ int main() {
  assert(b.smart_session_.attempted==at(10,4,11,54));b.ack();
  b.clock_->now+=300;s.through=b.clock_->now;b.smart_observe_(s,b.clock_->now);b.tick();assert(b.writes==2 && b.smart_session_.awake_minutes==33);
  b.clock_->now=at(10,4,11,39);s.through=b.clock_->now;s.stage=4;b.model_prediction_.valid=true;b.model_prediction_.stage=4;b.model_prediction_.sample_time=b.clock_->now-60;b.model_prediction_.read_at=b.clock_->now;b.smart_observe_(s,b.clock_->now);b.tick();
- assert(b.smart_session_.attempted==at(10,4,11,41));b.ack();
- b.clock_->now=at(10,4,11,41);b.tick();assert(b.smart_session_.finished);
+ assert(b.smart_session_.attempted==at(10,4,11,40));b.ack();
+ b.clock_->now=at(10,4,11,40);b.tick();assert(b.smart_session_.finished);
  b.clock_->now=at(10,4,18);b.tick();assert(b.writes==3 && b.smart_session_.onset==0 && b.smart_session_.confirmed==0);
  // Turning off cancels only an owned smart alarm; turning on creates no fallback.
- persisted.clear();HelioBridge off;off.clock_->now=at(10,4,6);off.setup_smart_();off.smart_enabled_=true;off.tick();
+ persisted.clear();extra_persisted.clear();HelioBridge off;off.clock_->now=at(10,4,6);off.setup_smart_();off.smart_enabled_=true;off.tick();
  off.smart_session_.onset=at(10,4,2);off.tick();assert(off.writes==1);off.ack();
  off.smart_enabled_=false;off.clock_->now+=60;off.tick();assert(off.cancels==1);off.ack();off.smart_enabled_=true;off.tick();assert(off.writes==1 && !off.smart_session_.onset);
  // Legacy migration removes the bridge-owned deadline alarm, without adopting a manual alarm.
@@ -40,11 +40,11 @@ int main() {
  old.version=1;old.awake_minutes=65535;seed(old);HelioBridge no_clock;no_clock.setup_smart_();no_clock.tick();assert(no_clock.smart_session_.settings.migration_pending && no_clock.smart_session_.awake_minutes==0);
  HelioBridge later;later.clock_->now=at(10,4,6);later.setup_smart_();later.smart_enabled_=true;later.tick();assert(!later.smart_session_.settings.migration_pending);
  // Accept and persist the wider setting; reject a window beyond the supported maximum.
- persisted.clear();HelioBridge wide;wide.clock_->now=at(10,4,18);wide.setup_smart_();wide.smart_enabled_=true;wide.tick_smart(8.5,60);
+ persisted.clear();extra_persisted.clear();HelioBridge wide;wide.clock_->now=at(10,4,18);wide.setup_smart_();wide.smart_enabled_=true;wide.tick_smart(8.5,60);
  assert(wide.smart_session_.settings.early_minutes==60 && wide.writes==0);
  HelioBridge wide_reboot;wide_reboot.clock_->now=at(10,4,19);wide_reboot.setup_smart_();assert(wide_reboot.smart_session_.settings.early_minutes==60);
  wide.tick_smart(8.5,61);assert(wide.smart_message_.find("window 0-60min")!=std::string::npos && wide.writes==0);
  // Local date windows follow DST without imposing a wake limit.
- for(int month:{3,10}) { persisted.clear();HelioBridge d;int day=month==3?28:24;d.clock_->now=at(month,day,18);d.setup_smart_();d.smart_enabled_=true;d.tick();assert(d.smart_session_.session_end==at(month,day+1,18));assert(d.smart_session_.session_end-d.smart_session_.night_start==(month==3?23:25)*3600U);assert(d.writes==0); }
+ for(int month:{3,10}) { persisted.clear();extra_persisted.clear();HelioBridge d;int day=month==3?28:24;d.clock_->now=at(month,day,18);d.setup_smart_();d.smart_enabled_=true;d.tick();assert(d.smart_session_.session_end==at(month,day+1,18));assert(d.smart_session_.session_end-d.smart_session_.night_start==(month==3?23:25)*3600U);assert(d.writes==0); }
  std::cout<<"Production controller: no fallback, targets after 10, compensation, early window, reboot, rollover, cancellation, migration/manual ownership and DST passed\n";
 }

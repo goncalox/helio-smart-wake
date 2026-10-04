@@ -119,7 +119,16 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   uint8_t gate_logged_flags_{255};
   sleep_data::Snapshot smart_snapshot_{};
   smart_wake::Session smart_session_{};
-  ESPPreferenceObject smart_pref_;
+  ESPPreferenceObject smart_pref_, follow_pref_;
+  smart_wake::FollowUp follow_{};
+  smart_wake::Wear wear_{};
+  bool follow_operation_{false}, smart_new_attempt_{false};
+  bool save_follow_();
+  bool tick_follow_(uint32_t now);
+  bool follow_monitoring_(uint32_t now) const;
+  void stop_follow_();
+  void smart_unsent_();
+  uint32_t smart_verified_epoch_() const;
   text_sensor::TextSensor *smart_status_sensor_{nullptr}, *smart_alarm_sensor_{nullptr}, *smart_target_sensor_{nullptr};
   sensor::Sensor *smart_awake_sensor_{nullptr}, *sleep_awake_sensor_{nullptr};
   bool smart_enabled_{false}, smart_dispatch_{false}, smart_operation_{false};

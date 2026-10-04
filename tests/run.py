@@ -13,7 +13,7 @@ COMPONENT = ROOT / 'components/helio_bridge'
 def run(*args):
     subprocess.run(list(args), check=True)
 
-for name in ('protocol', 'alarms', 'sleep', 'activity', 'smart', 'dual_light'):
+for name in ('protocol', 'alarms', 'sleep', 'activity', 'smart', 'dual_light', 'follow'):
     output = BUILD / name
     run('c++', '-std=c++17', '-I' + str(COMPONENT),
         str(ROOT / f'tests/test_{name}.cpp'), '-o', str(output))
@@ -29,6 +29,17 @@ controller.write_text(production)
 run('c++', '-std=c++17', '-I' + str(COMPONENT), '-I' + str(smart),
     str(controller), str(smart / 'test_no_deadline.cpp'), '-o', str(BUILD / 'smart-controller'))
 run(str(BUILD / 'smart-controller'))
+run('c++', '-std=c++17', '-I' + str(COMPONENT), '-I' + str(smart),
+    str(controller), str(smart / 'test_follow.cpp'), '-o', str(BUILD / 'follow-controller'))
+run(str(BUILD / 'follow-controller'))
+bridge=(COMPONENT / 'helio_bridge.cpp').read_text()
+alarms=BUILD / 'alarm-controller.cpp'
+alarms.write_text('#include "fake_bridge.h"\nnamespace esphome::helio_bridge {\n' +
+                  bridge[bridge.index('void HelioBridge::request_alarms_'):])
+run('c++', '-std=c++17', '-I' + str(COMPONENT), '-I' + str(smart),
+    str(controller), str(alarms), str(smart / 'test_follow_alarms.cpp'), '-o', str(BUILD / 'follow-alarms'))
+run(str(BUILD / 'follow-alarms'))
+
 
 # Compare B-163 public keys/shared secrets with independent OpenSSL results.
 run('cc', '-shared', '-fPIC', str(COMPONENT / 'ecdh.c'), '-o', str(BUILD / 'libhelio_ecdh.dylib'))

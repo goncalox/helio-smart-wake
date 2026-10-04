@@ -18,8 +18,20 @@ Once successfully saved, an alarm runs on the strap itself.
 - During the early window, choose an earlier alarm only when both the strap and
   the experimental model report fresh, aligned **Light or Awake**. Mixed pairs
   qualify too; no repeated Awake readings are required.
-- Schedule that alarm at least two minutes ahead, round to a minute, verify it
-  by reading it back, and keep it fixed for that night.
+- Schedule that alarm at least **30 seconds** ahead, round upward to a minute,
+  verify it by reading it back, and keep the primary alarm fixed for that night.
+- After the primary alarm, fresh post-alarm activity indicating the strap is worn
+  schedules a follow-up five minutes after the last verified alarm, repeating while worn.
+  Late data schedules the next safe minute instead of a time that already passed.
+- A fresh not-worn or charging record stops the sequence and cancels a pending
+  bridge-owned follow-up. Missing HR, failed reads or stale data cannot create a follow-up.
+  Removal detection depends on when the strap supplies its minute records.
+  Follow-ups do not require the early sleep-stage gate; they are reminders to get up.
+- A follow-up write still unverified when its time passes stops further reminders.
+  Reboots retain the sequence, but installing this feature does not restart an already
+  completed morning. Manual alarm controls and disabling smart wake stop reminders.
+  The sequence retires at the next 18:00 night-arm boundary after the primary alarm;
+  this never caps the sleep-duration target.
 - If either source reports Deep or REM, is invalid, missing or stale, keep the full-target alarm.
 - Preserve other Zepp alarms; manual bridge controls take precedence for the night.
 - Settings, alarm ownership and dated night state survive restarts.
@@ -126,7 +138,7 @@ block evaluation; it has no independent-night or clinical validation.
 Its scores are uncalibrated and the newest strap stage can be revised later.
 The deployed fit is the full-night fit, not a held-out fold.
 Agreement at scheduling cannot establish the physiological sleep stage when
-the strap vibrates two to three minutes later.
+the strap vibrates 30–89 seconds later (plus any scheduling/connection delay).
 The full sleep-duration alarm remains the fallback when the early gate is not met.
 
 ## Tests
@@ -136,7 +148,7 @@ Run `python tests/run.py` with Python 3.10+, a C/C++ compiler, OpenSSL with
 The tests run locally without contacting or flashing any device.
 They cover alarm ownership, protocol framing, sleep/awake accounting, data transfer
 validation, dated sessions and legacy migration, DST, the Light-or-Awake gate, causal
-features, fixed Python/C++ inference parity and rolling log integrity.
+features, worn follow-ups/removal/reboots, fixed Python/C++ inference parity and rolling log integrity.
 Synthetic fixtures are included; private overnight recordings are not.
 
 ## Source layout

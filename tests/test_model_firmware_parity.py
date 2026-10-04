@@ -86,3 +86,14 @@ assert new['model_wake_ready'] and new['gate_policy']=='both-Light-or-Awake'
 assert 'model_light_ready' not in new
 assert decoded[1]['gate_policy']=='both-Light' and decoded[1]['model_light_ready']
 print('Legacy and Light-or-Awake gate policies decode distinctly.')
+
+wear=bytes([1,2,115,0])+struct.pack('<2I',1100,1160)
+follow=struct.pack('<5I4B',1,500,1000,1300,1300,0,0,0,0)
+raw3=struct.pack('<BIIH',13,1160,123,12)+wear+struct.pack('<BIIH',14,1160,123,24)+follow
+packed3=bytearray()
+for value in raw3: packed3.extend(bytes([value]) if value else bytes([0,1]))
+blob3=struct.pack('<4sIII',b'HLG2',79,len(raw3),zlib.crc32(raw3))+packed3
+new3=decode_blob(blob3,79)
+assert new3[0]['state']=='Removed' and new3[0]['sample_time']==1100
+assert new3[1]['follow_up']['confirmed']==1300 and not new3[1]['follow_up']['uncertain']
+print('Wear observations and persisted follow-up records decode correctly.')

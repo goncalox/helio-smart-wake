@@ -36,8 +36,8 @@ int main() {
   const uint32_t opens = goal - 15 * 60;
   assert(!light_window(s, opens - 1) && light_window(s, opens));
   record.through = opens;
-  assert(desired(s, record, opens, opens) == opens + 120);
-  assert(desired(s, record, opens + 1, opens) == opens + 180);
+  assert(desired(s, record, opens, opens) == opens + 60);
+  assert(desired(s, record, opens + 1, opens) == opens + 60);
   record.stage = 5;
   assert(desired(s, record, opens, opens) == goal);
   record.stage = 8;
@@ -66,7 +66,7 @@ int main() {
   assert(!light_window(s, day + 9 * 3600 + 44 * 60));
   const auto compensated_opens = day + 9 * 3600 + 45 * 60;
   record.through = compensated_opens;
-  assert(desired(s, record, compensated_opens, compensated_opens) == compensated_opens + 120);
+  assert(desired(s, record, compensated_opens, compensated_opens) == compensated_opens + 60);
   record.accounting_complete = false;
   assert(desired(s, record, compensated_opens, compensated_opens) == target(s));
   record.accounting_complete = true;
@@ -81,8 +81,8 @@ int main() {
   assert(elapsed(s, opens + 120)); // An unconfirmed earlier write may have succeeded.
   s.finished = 1;
   assert(desired(s, record, opens, opens) == 0);
-  assert(writable(goal, goal - 120));
-  assert(!writable(goal, goal - 119));
+  assert(writable(goal, goal - 30));
+  assert(!writable(goal, goal - 29));
   assert(!writable(goal, goal + 60));
   assert(!writable(goal + 86400, goal));
   // Even a target after the session-selection boundary is never capped.

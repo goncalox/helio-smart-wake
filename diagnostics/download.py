@@ -58,6 +58,17 @@ def decode_blob(blob, sequence):
                         gate_policy='both-Light' if payload[0]==1 else 'both-Light-or-Awake',
                         **dict(zip(names,fields)))
             if payload[0]==1: item['model_light_ready']=bool(flags&8)
+        elif kind == 13:
+            if size != 12 or payload[0] != 1 or payload[1] > 2: raise ValueError('unknown wear observation layout')
+            item.update(kind='wear_observation', state=('Unknown','Worn','Removed')[payload[1]],
+                        activity_kind=payload[2], heart_rate=payload[3],
+                        sample_time=struct.unpack_from('<I',payload,4)[0], read_at=struct.unpack_from('<I',payload,8)[0])
+        elif kind == 14:
+            if size != 24 or struct.unpack_from('<I',payload)[0] != 1: raise ValueError('unknown follow-up layout')
+            names=('version','night_start','primary','confirmed','attempted')
+            follow=dict(zip(names,struct.unpack_from('<5I',payload)))
+            follow.update(stopped=bool(payload[20]),cancel_pending=bool(payload[21]),uncertain=bool(payload[22]))
+            item.update(kind='follow_up',follow_up=follow)
         elif kind == 9:
             item.update(kind="activity", **decode_activity(payload))
         elif kind == 6:
@@ -160,8 +171,8 @@ async def download(args):
 if __name__=='__main__':
     os.umask(0o077)
     parser=argparse.ArgumentParser()
-    parser.add_argument('--config',type=Path,default=Path('helio-bridge.yaml'))
-    parser.add_argument('--host',default='helio-bridge.local')
+    parser.add_argument('--config',type=Path,default=Path('/Users/goncalo/esphome/helio-bridge.yaml'))
+    parser.add_argument('--host',default='192.168.1.154')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--since',type=int)
     asyncio.run(download(parser.parse_args()))

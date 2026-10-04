@@ -6,7 +6,7 @@ bool HelioBridge::activity_phase_() const {
   return phase_ == Phase::ACTIVITY_START || phase_ == Phase::ACTIVITY_DATA || phase_ == Phase::ACTIVITY_ACK;
 }
 void HelioBridge::activity_stop_(const char *reason) {
-  model_prediction_ = {};
+  model_prediction_ = {}; wear_ = {};
   if (model_stage_sensor_) model_stage_sensor_->publish_state("Activity read failed");
   ESP_LOGI("helio_activity", "%s", reason);
   diagnostic_text_(10, reason);
@@ -17,7 +17,7 @@ bool HelioBridge::begin_activity_() {
   const uint32_t now_ms = millis();
   const bool early_window = smart_enabled_ && !smart_session_.finished &&
       smart_wake::light_window(smart_session_, clock_->utcnow().timestamp);
-  const uint32_t interval = early_window ? 60000 : 240000;
+  const uint32_t interval = early_window || follow_monitoring_(clock_->utcnow().timestamp) ? 60000 : 240000;
   if (queued_alarm_ || (activity_attempted_ && uint32_t(now_ms - activity_attempt_at_) < interval)) return false;
   model_prediction_ = {};
   if (model_stage_sensor_) model_stage_sensor_->publish_state("Waiting for activity read");
@@ -75,6 +75,11 @@ void HelioBridge::activity_control_(const std::vector<uint8_t> &data) {
     const uint32_t latest = count ? activity_transfer_.start_time + (count-1)*60 : 0;
     ESP_LOGI("helio_activity", "Activity recorded: %u minutes; latest=%u; age=%d seconds (observation only)",
         unsigned(count), unsigned(latest), latest ? int(clock_->utcnow().timestamp)-int(latest) : -1);
+    wear_ = smart_wake::wear_from_records(activity_transfer_.raw.data(), activity_transfer_.raw.size(),
+        activity_transfer_.start_time, clock_->utcnow().timestamp);
+    uint8_t observation[12] = {1, uint8_t(wear_.state), wear_.kind, wear_.heart_rate};
+    protocol::write32(observation+4, wear_.sample); protocol::write32(observation+8, wear_.read_at);
+    diagnostic_append_(13, observation, sizeof(observation));
     update_model_(activity_transfer_.raw.data(), activity_transfer_.raw.size(), activity_transfer_.start_time);
     activity_transfer_.raw.clear();
     close_requested_ = true;

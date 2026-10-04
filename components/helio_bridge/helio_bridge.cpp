@@ -14,7 +14,7 @@ static const char *const TAG = "helio_bridge";
 
 void HelioBridge::setup() {
   diagnostic_setup_();
-  diagnostic_text_(8, "Early wake policy: both sources Light or Awake");
+  diagnostic_text_(8, "Early wake: Light/Awake; 30s buffer; five-minute worn follow-ups");
   this->parent()->set_enabled(false);
   const auto address = this->parent()->get_address();
   alarm_pref_ = global_preferences->make_preference<alarms::Owned>(0x48454c32U ^ uint32_t(address) ^ uint32_t(address >> 32));
@@ -131,6 +131,8 @@ void HelioBridge::fail_(const char *reason) {
   status_(reason);
   if (is_alarm_()) alarm_status_(reason);
   if (operation_ == Operation::SLEEP) sleep_status_(reason);
+  if (is_alarm_() && operation_ == Operation::SET_ALARM && phase_ != Phase::ALARM_WRITE && phase_ != Phase::ALARM_VERIFY)
+    smart_unsent_();
   if (is_alarm_()) smart_result_(false);
   close_();
 }
@@ -275,7 +277,9 @@ void HelioBridge::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t 
         contact_failed_ = true;
         status_("Helio disconnected before operation completed");
         if (is_alarm_()) alarm_status_("Helio disconnected; alarm not confirmed");
-        if (is_alarm_()) smart_result_(false);
+        if (is_alarm_() && operation_ == Operation::SET_ALARM && phase_ != Phase::ALARM_WRITE && phase_ != Phase::ALARM_VERIFY)
+    smart_unsent_();
+  if (is_alarm_()) smart_result_(false);
         if (operation_ == Operation::SLEEP) sleep_status_("Helio disconnected; sleep read incomplete");
       }
       close_();
@@ -442,9 +446,9 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
     ESP_LOGI(TAG, "Alarm slot %u: %02u:%02u, enabled=%u, days=0x%02x", a.slot, a.hour, a.minute, !!(a.flags & 4), a.repeat);
   // A failed update can leave the previous verified time in the same slot.
   // Recover that known ownership before retrying or cancelling, without adopting another alarm.
-  if (phase_ == Phase::ALARMS && smart_operation_ && owned_.valid && smart_session_.confirmed) {
-    const auto local = ESPTime::from_epoch_local(smart_session_.confirmed);
-    const alarms::Owned previous{1, owned_.slot, local.hour, local.minute, 0};
+  if (phase_ == Phase::ALARMS && smart_operation_ && owned_.valid && smart_verified_epoch_()) {
+    const auto local = ESPTime::from_epoch_local(smart_verified_epoch_());
+    const alarms::Owned previous{1, owned_.slot, uint8_t(local.hour), uint8_t(local.minute), 0};
     if (std::any_of(list.begin(), list.end(), [&previous](const alarms::Alarm &a) { return alarms::matches(a, previous); })) {
       owned_ = previous;
       if (!alarm_pref_.save(&owned_) || !global_preferences->sync()) { fail_("Cannot restore verified alarm ownership"); return; }
@@ -483,10 +487,18 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
     close_requested_ = true;
     return;
   }
+  if (operation_ == Operation::SET_ALARM && smart_operation_ && own != list.end() && (own->flags & 4) &&
+      own->hour == requested_.hour && own->minute == requested_.minute && own->repeat == requested_.repeat &&
+      (follow_operation_ ? follow_.attempted : smart_session_.attempted) > clock_->utcnow().timestamp) {
+    alarm_status_("Alarm saved and verified by readback"); smart_result_(true); close_requested_ = true; return;
+  }
   std::vector<uint8_t> command;
   if (operation_ == Operation::SET_ALARM) {
-    if (!smart_write_allowed_()) { fail_("Smart alarm time too close or passed; existing alarm retained"); return; }
-    if (smart_operation_ && smart_session_.confirmed && own == list.end()) {
+    if (!smart_write_allowed_()) { smart_unsent_(); fail_("Smart alarm time too close or passed; existing alarm retained"); return; }
+    // Once-only alarms may disappear after ringing; a different alarm in our slot is a manual override.
+    const bool changed_slot = std::any_of(list.begin(), list.end(), [this](const alarms::Alarm &a) { return owned_.valid && a.slot == owned_.slot; });
+    if (smart_operation_ && smart_verified_epoch_() && own == list.end() && (!follow_operation_ || changed_slot)) {
+      follow_.stopped = 1; follow_.cancel_pending = 0; save_follow_();
       smart_session_.finished = smart_session_.manual_override = 1;
       save_smart_();
       smart_operation_ = false;
@@ -514,7 +526,13 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
       close_requested_ = true;
       return;
     }
-    if (own == list.end()) { fail_("Alarm changed outside bridge; cancellation stopped"); return; }
+    if (own == list.end()) {
+      if (follow_operation_) {
+        follow_.stopped = 1; follow_.cancel_pending = 0; save_follow_();
+        follow_operation_ = smart_operation_ = false;
+      }
+      fail_("Alarm changed outside bridge; cancellation stopped"); return;
+    }
     command = {5, 1, owned_.slot};
   }
   phase_ = Phase::ALARM_WRITE;
