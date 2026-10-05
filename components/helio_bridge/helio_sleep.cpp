@@ -86,6 +86,7 @@ void HelioBridge::finish_sleep_() {
   if (diagnostic_sleep_.size() == sleep_transfer_.bytes())
     diagnostic_append_(1, diagnostic_sleep_.data(), diagnostic_sleep_.size());
   else diagnostic_text_(7, "Raw snapshot incomplete; excluded");
+  if(diagnostic_sleep_.size()==sleep_transfer_.bytes())learning_reference_(diagnostic_sleep_.data(),diagnostic_sleep_.size(),now);
   diagnostic_sleep_.clear();
   publish_timestamp_(sleep_sync_sensor_, now);
   sleep_records_sensor_->publish_state(sleep_transfer_.records());

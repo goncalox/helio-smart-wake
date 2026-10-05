@@ -10,6 +10,7 @@
 #include "sleep_data.h"
 #include "activity_data.h"
 #include "smart_wake.h"
+#include "adaptive_model.h"
 #include <deque>
 #include <nvs.h>
 #include <array>
@@ -50,6 +51,9 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void set_sleep_records(sensor::Sensor *sensor) { sleep_records_sensor_ = sensor; }
   void set_smart_enabled(bool enabled) { smart_enabled_ = enabled; }
   void tick_smart(float hours, int early_minutes);
+  void set_learning_enabled(bool value) {learning_enabled_=value;learning_publish_();}
+  void set_learning_automatic(bool value) {learning_automatic_=value;learning_publish_();}
+  void set_learning_status(text_sensor::TextSensor *sensor) {learning_status_sensor_=sensor;}
   void set_model_stage(text_sensor::TextSensor *sensor) { model_stage_sensor_ = sensor; }
   void set_smart_status(text_sensor::TextSensor *sensor) { smart_status_sensor_ = sensor; }
   void set_smart_alarm(text_sensor::TextSensor *sensor) { smart_alarm_sensor_ = sensor; }
@@ -111,6 +115,17 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void activity_stop_(const char *reason);
   void activity_control_(const std::vector<uint8_t> &data);
   void activity_bulk_(const uint8_t *data, size_t size);
+  adaptive::Learner *learning_{nullptr};
+  nvs_handle_t learning_handle_{0};
+  bool learning_enabled_{true},learning_automatic_{true};
+  uint32_t learning_flush_at_{0},learning_tick_at_{0};
+  text_sensor::TextSensor *learning_status_sensor_{nullptr};
+  std::string learning_message_;
+  uint32_t learning_night_(uint32_t epoch) const;
+  void setup_learning_(); bool save_learning_(); void learning_tick_(); void learning_publish_();
+  void learning_status_(const char *message);
+  void learning_observe_(const stage_model::Prediction &base);
+  void learning_reference_(const uint8_t *raw,size_t size,uint32_t now);
   stage_model::Prediction model_prediction_{};
   text_sensor::TextSensor *model_stage_sensor_{nullptr};
   void update_model_(const uint8_t *raw, size_t size, uint32_t start);

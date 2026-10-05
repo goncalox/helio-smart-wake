@@ -39,10 +39,10 @@ def decode_blob(blob, sequence):
             if size % 594: raise ValueError('partial sleep record')
             item.update(kind='snapshot', raw_base64=base64.b64encode(payload).decode(),
                         records=[decode_record(payload[p:p+594]) for p in range(0, size, 594)])
-        elif kind == 11:
-            if size != 44 or payload[0] != 1: raise ValueError('unknown model observation layout')
+        elif kind in (11,17):
+            if (kind==11 and (size!=44 or payload[0]!=1)) or (kind==17 and (size!=48 or payload[0]!=2)): raise ValueError('unknown model observation layout')
             values = struct.unpack_from('<9f', payload, 8)
-            item.update(kind='model_prediction', model_version='20261003-v1', valid=bool(payload[1]),
+            item.update(kind='model_prediction', model_version='20261003-v1' if kind==11 else 'adaptive-'+str(struct.unpack_from('<I',payload,44)[0]), valid=bool(payload[1]),
                         stage={4:'Light',5:'Deep',8:'REM',7:'Awake'}.get(payload[2], 'Unknown'),
                         reason_code=payload[3], sample_time=struct.unpack_from('<I',payload,4)[0],
                         features=dict(zip(('heart_rate','hr_mean_5m','hr_sd_5m','intensity_mean_5m','steps_5m'),values[:5])),
@@ -58,6 +58,20 @@ def decode_blob(blob, sequence):
                         gate_policy='both-Light' if payload[0]==1 else 'both-Light-or-Awake',
                         **dict(zip(names,fields)))
             if payload[0]==1: item['model_light_ready']=bool(flags&8)
+        elif kind == 18:
+            if size!=548 or struct.unpack_from('<I',payload)[0]!=1: raise ValueError('unknown adaptive model audit layout')
+            names=('format','champion_version','candidate_version','trained_through','checked_through','evaluated_nights','promotions','rejections','candidate_created')
+            state=dict(zip(names,struct.unpack_from('<9I',payload)))
+            weights=struct.unpack_from('<48d',payload,36);counts=struct.unpack_from('<32I',payload,420)
+            state.update(champion_weights=[list(weights[i:i+6]) for i in range(0,24,6)],candidate_weights=[list(weights[i:i+6]) for i in range(24,48,6)],
+                         champion_test=[list(counts[i:i+4]) for i in range(0,16,4)],candidate_test=[list(counts[i:i+4]) for i in range(16,32,4)])
+            item.update(kind='adaptive_model_state',state=state)
+        elif kind == 16:
+            if size!=20 or payload[0]!=1: raise ValueError('unknown adaptive vote layout')
+            stages={4:'Light',5:'Deep',8:'REM',7:'Awake'}
+            fields=struct.unpack_from('<4I',payload,4)
+            item.update(kind='adaptive_vote',champion_stage=stages.get(payload[1],'Unknown'),candidate_stage=stages.get(payload[2],'Unknown'),
+                        input_valid=bool(payload[3]),sample_time=fields[0],champion_version=fields[1],candidate_version=fields[2],read_at=fields[3])
         elif kind == 13:
             if size != 12 or payload[0] != 1 or payload[1] > 2: raise ValueError('unknown wear observation layout')
             item.update(kind='wear_observation', state=('Unknown','Worn','Removed')[payload[1]],
@@ -86,7 +100,7 @@ def decode_blob(blob, sequence):
                 session.update(deadline_hour=hour, deadline_minute=minute, hard_deadline=True)
             item.update(kind='smart_session', session=session)
         else:
-            item.update(kind={2:'connection',3:'sleep_status',4:'alarm_status',5:'smart_status',7:'error',8:'system',10:'activity_status'}.get(kind, str(kind)),
+            item.update(kind={2:'connection',3:'sleep_status',4:'alarm_status',5:'smart_status',7:'error',8:'system',10:'activity_status',15:'learning_status'}.get(kind, str(kind)),
                         message=payload.decode(errors='replace'))
         events.append(item)
     return events

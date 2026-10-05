@@ -52,6 +52,8 @@ helio_bridge:
     name: Helio Recorded Sleep Duration
   sleep_records:
     name: Helio Sleep Records Read
+  learning_status:
+    name: Helio Model Learning Status
   model_stage:
     name: Helio Model Sleep Stage
   smart_status:
@@ -191,6 +193,24 @@ button:
       - lambda: id(helio).read_sleep();
 
 switch:
+  - platform: template
+    name: Helio Model Learning
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(helio).set_learning_enabled(true);
+    turn_off_action:
+      - lambda: id(helio).set_learning_enabled(false);
+  - platform: template
+    name: Helio Automatic Model Updates
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(helio).set_learning_automatic(true);
+    turn_off_action:
+      - lambda: id(helio).set_learning_automatic(false);
   - platform: template
     id: helio_smart_wake
     name: Helio Smart Wake

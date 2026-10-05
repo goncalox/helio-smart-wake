@@ -123,7 +123,7 @@ local records; it does not deploy coefficients or change alarms.
 
 ## Experimental model limits
 
-The fixed model `20261003-v1` uses latest heart rate, five-minute mean and standard
+The starting model `20261003-v1` uses latest heart rate, five-minute mean and standard
 deviation of heart rate, mean movement intensity and summed steps.
 It excludes stage-bearing activity bytes from its input.
 The inputs are device-processed minute summaries, not raw optical or motion waveforms.
@@ -136,10 +136,66 @@ no more than 90 seconds old, and the sample intervals aligned within one minute.
 The model was developed using one night and later strap labels, with only within-night
 block evaluation; it has no independent-night or clinical validation.
 Its scores are uncalibrated and the newest strap stage can be revised later.
-The deployed fit is the full-night fit, not a held-out fold.
+The starting fit is the full-night fit, not a held-out fold.
+Accepted adaptive versions keep these same causal features and the original scaling;
+normalized adaptive inputs are clipped to ±8, and their learned coefficients persist locally.
 Agreement at scheduling cannot establish the physiological sleep stage when
 the strap vibrates 30–89 seconds later (plus any scheduling/connection delay).
 The full sleep-duration alarm remains the fallback when the early gate is not met.
+
+## Continuous learning on the ESP32
+
+Learning and automatic checked updates default to **on** in this package.
+Home Assistant exposes **Helio Model Learning**, **Helio Automatic Model Updates**,
+and **Helio Model Learning Status**; no computer, scheduled job or Home Assistant
+connection is needed for training, comparison or activation.
+Turning learning off stops collection/training and retains the current active model;
+turning automatic updates off keeps a qualified candidate waiting until updates are enabled again.
+
+The ESP32 stores up to three dated nights, at most 192 causal observations per night,
+using five HR/movement features without stage-bearing input bytes.
+Duplicate samples retain their first available features and predictions.
+Older rows are trimmed when a night exceeds that bound.
+Later complete night labels become eligible only when freshly observed at least
+12 hours after the recorded night ends and unchanged for at least an hour.
+Naps, gaps, invalid rows and provisional current-night stages cannot train a candidate.
+These are settled strap labels, still subject to later revisions, not measured sleep-study truth.
+
+A regularized, class-weighted logistic candidate trains from recent eligible nights in
+small slices while Bluetooth is idle and the latest sleep record is no longer live.
+Training pauses for Bluetooth/alarms and never changes the active coefficients.
+The candidate then stays **frozen for three later nights**, using saved predictions
+from those nights before their labels arrive; its training night is excluded.
+Each test night needs at least 80 matched observations, with at least 240 overall;
+insufficient or missed nights delay activation.
+The pooled tests must include at least 40 Light/Awake and 40 Deep/REM labels.
+Activation requires overall agreement not to decrease, balanced stage agreement and
+Light/Awake precision each to improve by at least three percentage points,
+no increase in the Deep/REM-to-Light/Awake error rate, at least 20 wake-ready predictions,
+and at least 80% of the old model's Light/Awake recall.
+This checks agreement with the strap; it cannot guarantee physiological accuracy
+or better results on every future night.
+
+Failed candidates are discarded and another candidate is trained from newer settled nights.
+The active version changes only after the whole learning state is successfully saved.
+Current dated data, frozen candidates, test counts and active coefficients survive restarts
+in one versioned, CRC-checked NVS blob; corrupt data falls back to the starting model.
+Observations flush hourly, so a power cut can lose the latest uncommitted hour.
+There is no replay of missing observations or automatic import of old desktop downloads.
+The feature starts by collecting new nights; its first eligible update needs several nights.
+
+The learner needs about 45 KiB of working memory, prefers PSRAM, and saves under
+24 KiB in the existing NVS partition without repartitioning the device.
+Learning disables itself if memory/storage is unavailable; the original model continues.
+Rolling diagnostic batches may be evicted earlier to leave room for atomic learning saves.
+Model versions, candidate votes, evaluation counts and coefficient changes are logged,
+so reviews can distinguish baseline predictions from adaptive ones.
+Private learned weights and training records are stored on the device, not in GitHub.
+
+The model remains one half of the existing early-wake gate: the strap must also
+report fresh, aligned Light/Awake inside the selected window.
+The full-duration target, 30-second buffer, five-minute worn reminders,
+manual overrides and alarm ownership rules are unchanged.
 
 ## Tests
 
