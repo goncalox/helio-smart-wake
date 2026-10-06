@@ -255,7 +255,7 @@ switch:
     turn_off_action:
       - lambda: id(helio).set_sleep_monitoring(false);
 
-# Waveshare's onboard LCD in its native 135x240 portrait orientation.
+# Waveshare's onboard LCD in upright 135x240 portrait orientation.
 psram:
   mode: quad
   speed: 40MHz
@@ -322,7 +322,7 @@ display:
   - platform: mipi_spi
     model: WAVESHARE-ESP32-S3-GEEK
     id: helio_screen
-    rotation: 0
+    rotation: 180
     color_depth: 16
     update_interval: 5s
     lambda: |-
