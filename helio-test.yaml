@@ -325,12 +325,12 @@ font:
     id: helio_screen_unit
     size: 21
     bpp: 4
-    glyphs: "%0123456789()-"
+    glyphs: "%"
   - file: "gfonts://Arimo@700"
     id: helio_screen_score_small
-    size: 14
+    size: 24
     bpp: 4
-    glyphs: "0123456789()-"
+    glyphs: "0123456789-"
   - file: "gfonts://Arimo@700"
     id: helio_screen_status
     size: 18
@@ -379,20 +379,20 @@ display:
       char score_text[8], personal_text[8];
       if (score_known) snprintf(score_text, sizeof(score_text), "%.0f", id(helio_sleep_score).state);
       else snprintf(score_text, sizeof(score_text), "--");
-      if (std::isfinite(personal_score)) snprintf(personal_text, sizeof(personal_text), "(%.0f)", personal_score);
-      else snprintf(personal_text, sizeof(personal_text), "(--)");
+      if (std::isfinite(personal_score)) snprintf(personal_text, sizeof(personal_text), "%.0f", personal_score);
+      else snprintf(personal_text, sizeof(personal_text), "--");
       int score_width, personal_width;
       id(helio_screen_value).measure(score_text, &score_width, &x_offset, &baseline, &height);
-      auto *personal_font = id(helio_screen_unit);
+      auto *personal_font = id(helio_screen_duration_wide);
       personal_font->measure(personal_text, &personal_width, &x_offset, &baseline, &height);
-      if (score_width + 3 + personal_width > 129) {
+      if (score_width + 8 + personal_width > 129) {
         personal_font = id(helio_screen_score_small);
         personal_font->measure(personal_text, &personal_width, &x_offset, &baseline, &height);
       }
-      const int score_left = (135 - score_width - 3 - personal_width) / 2;
+      const int score_left = (135 - score_width - 8 - personal_width) / 2;
       it.print(score_left, 163, id(helio_screen_value), score_fresh ? white : grey,
                TextAlign::BASELINE_LEFT, score_text);
-      it.print(score_left + score_width + 3, 163, personal_font,
+      it.print(score_left + score_width + 8, 163, personal_font,
                std::isfinite(personal_score) && score_fresh ? white : grey,
                TextAlign::BASELINE_LEFT, personal_text);
 

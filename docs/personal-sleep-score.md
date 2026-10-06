@@ -141,9 +141,11 @@ The general relevance of regular timing and repeated short nights is described b
 
 Home Assistant exposes **Helio Personal Sleep Score**, **Helio Personal Score Component Coverage**, **Helio Personal Score Status** and **Helio Personal Score Details**.
 
-The screen keeps Helio's number at its original size and adds our score in smaller parentheses, for example `78 (96)`.
+The screen keeps Helio's number at its original 54-pixel size and shows our score at 46 pixels alongside it, separated by a gap, for example `78 96`.
 
-Only the parenthesized font shrinks for wide values such as `100 (100)`; missing or differently dated personal results show `(--)`.
+Our displayed score is capped at 99; the stored 0–100 calculation and audits remain unchanged.
+
+If Helio reports 100, only our display font reduces to 24 pixels so both numbers still fit; missing or differently dated personal results show `--`.
 
 Alarm scheduling and the stage-learning controller are unchanged.
 

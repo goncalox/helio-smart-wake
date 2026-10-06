@@ -13,7 +13,7 @@ float HelioBridge::displayed_personal_score() const {
   const auto &helio=sleep_transfer_.night_score();
   // A retained personal score must not be paired with another night's Helio score.
   return night && helio.valid && night->onset==helio.onset && night->end==helio.end &&
-      std::isfinite(night->ours) ? night->ours : NAN;
+      std::isfinite(night->ours) ? std::clamp(night->ours, 0.f, 99.f) : NAN;
 }
 void HelioBridge::set_score_target(float hours) {
   if(!quality_ || !std::isfinite(hours) || hours<6 || hours>10)return;
