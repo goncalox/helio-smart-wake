@@ -327,6 +327,11 @@ font:
     bpp: 4
     glyphs: "%"
   - file: "gfonts://Arimo@700"
+    id: helio_screen_personal_score
+    size: 42
+    bpp: 4
+    glyphs: "0123456789-"
+  - file: "gfonts://Arimo@700"
     id: helio_screen_score_small
     size: 24
     bpp: 4
@@ -383,7 +388,7 @@ display:
       else snprintf(personal_text, sizeof(personal_text), "--");
       int score_width, personal_width;
       id(helio_screen_value).measure(score_text, &score_width, &x_offset, &baseline, &height);
-      auto *personal_font = id(helio_screen_duration_wide);
+      auto *personal_font = id(helio_screen_personal_score);
       personal_font->measure(personal_text, &personal_width, &x_offset, &baseline, &height);
       if (score_width + 8 + personal_width > 129) {
         personal_font = id(helio_screen_score_small);

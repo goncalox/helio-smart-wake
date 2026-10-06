@@ -141,7 +141,7 @@ The general relevance of regular timing and repeated short nights is described b
 
 Home Assistant exposes **Helio Personal Sleep Score**, **Helio Personal Score Component Coverage**, **Helio Personal Score Status** and **Helio Personal Score Details**.
 
-The screen keeps Helio's number at its original 54-pixel size and shows our score at 46 pixels alongside it, separated by a gap, for example `78 96`.
+The screen keeps Helio's number at its original 54-pixel size and shows our score at 42 pixels alongside it, separated by a gap, for example `78 96`.
 
 Our displayed score is capped at 99; the stored 0–100 calculation and audits remain unchanged.
 
