@@ -83,20 +83,30 @@ and wait for **Saved and verified**.
 **Cancel Helio Alarm** cancels only the bridge-owned alarm after checking ownership.
 
 The dimmed, always-visible portrait display shows three large values with short
-labels: **BAT** for strap battery percentage, **SIG** for the last Bluetooth signal
-strength in dBm, and **SLEEP** for the strap's latest nightly sleep score (0–100).
-It stays upright at 10% brightness, with no Wi-Fi readings or detailed status text.
-Unknown readings show dashes and stale readings fade grey.
+labels: **BAT** for strap battery percentage, **READ** for actual read health,
+and **SLEEP** for the strap's latest nightly sleep score (0–100).
+It stays upright at 10% brightness, with no signal-strength readings or detailed status text.
+Unknown battery/score readings show dashes and stale readings fade grey.
+READ shows **OK** (green) only after successful validated sleep and activity transfers,
+**READ** (blue) while fetching, **FAIL** (red) after a failed transfer,
+**WAIT** (amber) before first success or when reads become overdue, and **OFF**
+(grey) when sleep monitoring is disabled.
+The same status is exposed as `Helio Read Status` in Home Assistant.
+Freshness uses transfer receipt time, not the age of the last sleep stage;
+a strap that returns no new records can still have healthy communication.
+The freshness allowance is the polling interval plus the 90-second read timeout:
+6.5 minutes normally, 2.5 minutes in the early wake window or follow-up monitoring.
+Normal idle Bluetooth disconnections and activity reads preempted for an alarm
+are not counted as failed transfers; authenticated contact alone cannot clear a read failure.
 The sleep score is read from byte `0x16` of the validated sleep record, matching
 Gadgetbridge's Huami decoder; it is not computed by our model and does not affect alarms.
 It can change during the night or in later strap revisions.
 The latest valid night is selected independently of newer naps and record arrival order.
 The sleep score is also exposed to Home Assistant and decoded in downloaded logs.
-Bluetooth RSSI is sampled once per existing connection; values nearer zero mean
-a stronger signal, with compact signal bars beside its label.
-The contact-status dot is green for recent contact, blue while checking, amber
-for no recent contact, red after a failed check and grey before first contact.
-Normal idle Bluetooth disconnections do not imply the strap is unreachable.
+
+The next successful fetch can recover stored sleep records within the last 48 hours
+and activity records within the last 30 minutes, if still available on the strap.
+It cannot recover a missed real-time opportunity to schedule an early alarm.
 
 Settings are captured when a night is armed.
 To rearm with changed settings, disable smart wake, wait for verified cancellation,

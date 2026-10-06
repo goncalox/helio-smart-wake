@@ -5,7 +5,8 @@ namespace esphome::helio_bridge {
 bool HelioBridge::activity_phase_() const {
   return phase_ == Phase::ACTIVITY_START || phase_ == Phase::ACTIVITY_DATA || phase_ == Phase::ACTIVITY_ACK;
 }
-void HelioBridge::activity_stop_(const char *reason) {
+void HelioBridge::activity_stop_(const char *reason, bool failed) {
+  if (failed) read_health_.activity.failed = true;
   model_prediction_ = {}; wear_ = {};
   if (model_stage_sensor_) model_stage_sensor_->publish_state("Activity read failed");
   ESP_LOGI("helio_activity", "%s", reason);
@@ -63,6 +64,7 @@ void HelioBridge::activity_control_(const std::vector<uint8_t> &data) {
     return;
   }
   if (data[1] == 3 && phase_ == Phase::ACTIVITY_ACK) {
+    read_health_.activity.received(millis());
     // Version, requested UTC, actual start UTC, raw strap date, then original 8-byte rows.
     std::vector<uint8_t> payload(17);
     payload[0] = 1;

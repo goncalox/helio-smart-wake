@@ -83,6 +83,7 @@ void HelioBridge::update_sleep_age_() {
 }
 void HelioBridge::finish_sleep_() {
   const uint32_t now = clock_->utcnow().timestamp;
+  read_health_.sleep.received(millis());
   if (diagnostic_sleep_.size() == sleep_transfer_.bytes())
     diagnostic_append_(1, diagnostic_sleep_.data(), diagnostic_sleep_.size());
   else diagnostic_text_(7, "Raw snapshot incomplete; excluded");

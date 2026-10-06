@@ -16,27 +16,6 @@ ble_client:
   - mac_address: !secret helio_bridge__helio_mac
     id: helio_ble
     auto_connect: true
-    on_connect:
-      then:
-        # Read once on each existing connection; do not keep the strap connected.
-        - lambda: esp_ble_gap_read_rssi(id(helio_ble).get_remote_bda());
-
-sensor:
-  - platform: ble_client
-    type: rssi
-    ble_client_id: helio_ble
-    id: helio_ble_rssi
-    name: Helio Bluetooth Signal
-    entity_category: diagnostic
-    update_interval: never
-    on_value:
-      then:
-        - lambda: |-
-            if (std::isfinite(x)) {
-              id(helio_ble_signal) = x;
-              id(helio_ble_signal_seen) = millis();
-              id(helio_ble_signal_known) = true;
-            }
 
 helio_bridge:
   id: helio
@@ -111,6 +90,12 @@ time:
         - logger.log: "Helio clock synchronized directly via NTP"
 
 text_sensor:
+  - platform: template
+    name: Helio Read Status
+    id: helio_read_status
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: return std::string(id(helio).read_label(millis()));
   - platform: template
     name: Helio Strap Link
     id: helio_strap_link
@@ -299,28 +284,20 @@ globals:
     type: uint32_t
     restore_value: false
     initial_value: '0'
-  - id: helio_ble_signal
-    type: float
-    restore_value: false
-    initial_value: '0'
-  - id: helio_ble_signal_seen
-    type: uint32_t
-    restore_value: false
-    initial_value: '0'
-  - id: helio_ble_signal_known
-    type: bool
-    restore_value: false
-    initial_value: 'false'
 
 font:
   - file: "gfonts://Roboto"
     id: helio_screen_label
     size: 16
-    glyphs: "BAT SIGLEP"
+    glyphs: "BAT REDSLP"
   - file: "gfonts://Roboto"
     id: helio_screen_value
     size: 48
     glyphs: "0123456789% -"
+  - file: "gfonts://Roboto"
+    id: helio_screen_status
+    size: 40
+    glyphs: "WAIT REDOKFL"
 
 display:
   - platform: mipi_spi
@@ -339,26 +316,12 @@ display:
       it.print(67, 2, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "BAT");
       if (known) it.printf(67, 22, id(helio_screen_value), accent, TextAlign::TOP_CENTER, "%.0f%%", battery);
       else it.print(67, 22, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--%");
-      it.print(67, 82, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "SIG");
-      const auto link = id(helio).connection_indicator(millis());
-      const Color link_color = link == 2 ? Color(100, 210, 170) : link == 1 ? Color(100, 165, 235) :
-          link == 3 ? Color(240, 180, 70) : link == 4 ? Color(245, 85, 75) : grey;
-      it.filled_circle(14, 91, 4, link_color);
-      if (id(helio_ble_signal_known)) {
-        const float rssi = id(helio_ble_signal);
-        const uint32_t signal_age = (millis() - id(helio_ble_signal_seen)) / 60000;
-        const bool stale = signal_age >= 15 || link == 3 || link == 4;
-        const Color signal_color = stale ? grey : rssi >= -60 ? Color(100, 210, 170) :
-            rssi >= -75 ? Color(240, 180, 70) : Color(245, 85, 75);
-        it.printf(67, 102, id(helio_screen_value), signal_color, TextAlign::TOP_CENTER, "%.0f", rssi);
-        const int count = rssi >= -60 ? 4 : rssi >= -75 ? 3 : rssi >= -85 ? 2 : 1;
-        for (int i = 0; i < count; i++) {
-          const int height = 3 + i * 3;
-          it.filled_rectangle(101 + i * 6, 95 - height, 4, height, signal_color);
-        }
-      } else {
-        it.print(67, 102, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--");
-      }
+      it.print(67, 82, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "READ");
+      const auto read = id(helio).read_indicator(millis());
+      const Color read_color = read == 2 ? Color(100, 210, 170) : read == 1 ? Color(100, 165, 235) :
+          read == 0 ? Color(240, 180, 70) : read == 3 ? Color(245, 85, 75) : grey;
+      it.print(67, 106, id(helio_screen_status), read_color, TextAlign::TOP_CENTER,
+               id(helio).read_label(millis()));
       it.print(67, 162, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "SLEEP");
       const bool score_known = id(helio_sleep_score).has_state() && std::isfinite(id(helio_sleep_score).state);
       const bool score_fresh = score_known && uint32_t(millis() - id(helio_score_seen)) < 900000U;

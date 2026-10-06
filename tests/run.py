@@ -13,7 +13,7 @@ COMPONENT = ROOT / 'components/helio_bridge'
 def run(*args):
     subprocess.run(list(args), check=True)
 
-for name in ('protocol', 'alarms', 'sleep', 'activity', 'smart', 'dual_light', 'follow', 'adaptive'):
+for name in ('protocol', 'alarms', 'sleep', 'activity', 'smart', 'dual_light', 'follow', 'adaptive', 'read_health'):
     output = BUILD / name
     run('c++', '-std=c++17', '-I' + str(COMPONENT),
         str(ROOT / f'tests/test_{name}.cpp'), '-o', str(output))

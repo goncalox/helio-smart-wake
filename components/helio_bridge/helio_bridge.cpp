@@ -61,6 +61,20 @@ const char *HelioBridge::connection_label(uint32_t now) const {
   }
 }
 void HelioBridge::test_connection() { start_(Operation::TEST); }
+uint8_t HelioBridge::read_indicator(uint32_t now) const {
+  const bool clock_ready = clock_ != nullptr && clock_->utcnow().is_valid();
+  const uint32_t utc = clock_ready ? clock_->utcnow().timestamp : 0;
+  const bool frequent = clock_ready && ((smart_enabled_ && !smart_session_.finished &&
+      smart_wake::light_window(smart_session_, utc)) || follow_monitoring_(utc));
+  // Poll cadence plus the existing 90-second read timeout.
+  const uint32_t max_age = frequent ? 150000U : 390000U;
+  const bool reading = operation_ == Operation::SLEEP && phase_ != Phase::IDLE &&
+      phase_ != Phase::CLOSING && !close_requested_;
+  return uint8_t(read_health_.state(now, max_age, sleep_monitoring_, clock_ready, reading));
+}
+const char *HelioBridge::read_label(uint32_t now) const {
+  return read_health::label(read_health::State(read_indicator(now)));
+}
 void HelioBridge::set_alarm(int hour, int minute, int repeat) {
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || repeat < 0 || repeat > 127) {
     alarm_status_("Invalid alarm time or repeat days"); return;
@@ -131,7 +145,10 @@ void HelioBridge::fail_(const char *reason) {
   diagnostic_text_(7, reason);
   status_(reason);
   if (is_alarm_()) alarm_status_(reason);
-  if (operation_ == Operation::SLEEP) sleep_status_(reason);
+  if (operation_ == Operation::SLEEP) {
+    read_health_.sleep.failed = true;
+    sleep_status_(reason);
+  }
   if (is_alarm_() && operation_ == Operation::SET_ALARM && phase_ != Phase::ALARM_WRITE && phase_ != Phase::ALARM_VERIFY)
     smart_unsent_();
   if (is_alarm_()) smart_result_(false);
@@ -163,7 +180,7 @@ void HelioBridge::loop() {
     return;
   }
   if (activity_phase_() && (queued_alarm_ || int32_t(now - activity_deadline_) >= 0)) {
-    activity_stop_(queued_alarm_ ? "Activity read preempted for alarm" : "Activity read timed out; sleep read retained"); return;
+    activity_stop_(queued_alarm_ ? "Activity read preempted for alarm" : "Activity read timed out; sleep read retained", !queued_alarm_); return;
   }
   if (operation_ == Operation::SLEEP && phase_ != Phase::CLOSING && int32_t(now - sleep_deadline_) >= 0) {
     fail_("Sleep read timed out"); return;
@@ -282,7 +299,10 @@ void HelioBridge::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t 
         if (is_alarm_() && operation_ == Operation::SET_ALARM && phase_ != Phase::ALARM_WRITE && phase_ != Phase::ALARM_VERIFY)
     smart_unsent_();
   if (is_alarm_()) smart_result_(false);
-        if (operation_ == Operation::SLEEP) sleep_status_("Helio disconnected; sleep read incomplete");
+        if (operation_ == Operation::SLEEP) {
+          read_health_.sleep.failed = true;
+          sleep_status_("Helio disconnected; sleep read incomplete");
+        }
       }
       close_();
       phase_ = Phase::IDLE;

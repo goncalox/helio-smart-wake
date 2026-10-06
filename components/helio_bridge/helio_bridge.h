@@ -11,6 +11,7 @@
 #include "activity_data.h"
 #include "smart_wake.h"
 #include "adaptive_model.h"
+#include "read_health.h"
 #include <deque>
 #include <nvs.h>
 #include <array>
@@ -35,6 +36,8 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   // A normal BLE disconnect between polls does not mean the strap is unreachable.
   uint8_t connection_indicator(uint32_t now) const;
   const char *connection_label(uint32_t now) const;
+  uint8_t read_indicator(uint32_t now) const;
+  const char *read_label(uint32_t now) const;
   void download_diagnostics(int sequence);
   void diagnostic_event(const char *message);
   void set_diagnostic_status(text_sensor::TextSensor *sensor) { diagnostic_status_sensor_ = sensor; }
@@ -69,6 +72,7 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   Operation operation_{Operation::TEST};
   uint32_t contact_at_{0};
   bool contact_seen_{false}, contact_failed_{false};
+  read_health::Health read_health_;
   text_sensor::TextSensor *status_sensor_{nullptr};
   text_sensor::TextSensor *alarm_sensor_{nullptr};
   sensor::Sensor *battery_sensor_{nullptr};
@@ -114,7 +118,7 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   bool activity_attempted_{false};
   bool activity_phase_() const;
   bool begin_activity_();
-  void activity_stop_(const char *reason);
+  void activity_stop_(const char *reason, bool failed = true);
   void activity_control_(const std::vector<uint8_t> &data);
   void activity_bulk_(const uint8_t *data, size_t size);
   adaptive::Learner *learning_{nullptr};
