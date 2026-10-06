@@ -46,7 +46,7 @@ The configured timezone is `Europe/Lisbon`; edit `helio-test.yaml` for another z
 ## Setup
 
 Tested with ESPHome **2026.8.0**, the ESP-IDF framework, and the Waveshare
-ESP32-S3-GEEK with its 2 MB quad PSRAM and onboard 240×135 display.
+ESP32-S3-GEEK with its 2 MB quad PSRAM and onboard 135×240 display.
 
 1. Clone this repository into an ESPHome configuration directory.
 2. Copy `secrets.example.yaml` to `secrets.yaml` and replace every placeholder.
@@ -82,8 +82,14 @@ Changing the time selector alone does not write an alarm; press **Set Helio Alar
 and wait for **Saved and verified**.
 **Cancel Helio Alarm** cancels only the bridge-owned alarm after checking ownership.
 
-The dimmed, always-visible display shows strap battery, reading age and recent
-contact status, at 10% brightness by default.
+The dimmed, always-visible portrait display shows strap battery, reading age,
+recent contact status, Wi-Fi signal strength and the last Bluetooth signal strength,
+at 10% brightness by default.
+Signal strength is shown as bars and dBm; values nearer zero mean a stronger signal.
+Bluetooth RSSI is sampled once per existing connection and its age is shown,
+so normal idle disconnections do not imply a lost strap or a live signal measurement.
+Wi-Fi RSSI refreshes every 15 seconds and shows Offline when disconnected.
+Both signal sensors are also available as Home Assistant diagnostics.
 The connection indicator accounts for normal idle Bluetooth disconnections.
 
 Settings are captured when a night is armed.

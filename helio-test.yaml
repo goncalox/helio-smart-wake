@@ -16,6 +16,32 @@ ble_client:
   - mac_address: !secret helio_bridge__helio_mac
     id: helio_ble
     auto_connect: true
+    on_connect:
+      then:
+        # Read once on each existing connection; do not keep the strap connected.
+        - lambda: esp_ble_gap_read_rssi(id(helio_ble).get_remote_bda());
+
+sensor:
+  - platform: wifi_signal
+    id: helio_wifi_rssi
+    name: Helio Wi-Fi Signal
+    entity_category: diagnostic
+    update_interval: 15s
+  - platform: ble_client
+    type: rssi
+    ble_client_id: helio_ble
+    id: helio_ble_rssi
+    name: Helio Bluetooth Signal
+    entity_category: diagnostic
+    update_interval: never
+    on_value:
+      then:
+        - lambda: |-
+            if (std::isfinite(x)) {
+              id(helio_ble_signal) = x;
+              id(helio_ble_signal_seen) = millis();
+              id(helio_ble_signal_known) = true;
+            }
 
 helio_bridge:
   id: helio
@@ -229,7 +255,7 @@ switch:
     turn_off_action:
       - lambda: id(helio).set_sleep_monitoring(false);
 
-# Waveshare's onboard 135x240 LCD, rotated for a readable 240x135 layout.
+# Waveshare's onboard LCD in its native 135x240 portrait orientation.
 psram:
   mode: quad
   speed: 40MHz
@@ -267,6 +293,18 @@ globals:
     type: uint32_t
     restore_value: false
     initial_value: '0'
+  - id: helio_ble_signal
+    type: float
+    restore_value: false
+    initial_value: '0'
+  - id: helio_ble_signal_seen
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: helio_ble_signal_known
+    type: bool
+    restore_value: false
+    initial_value: 'false'
 
 font:
   - file: "gfonts://Roboto"
@@ -278,13 +316,13 @@ font:
     glyphs: "0123456789% -"
   - file: "gfonts://Roboto"
     id: helio_screen_detail
-    size: 13
+    size: 11
 
 display:
   - platform: mipi_spi
     model: WAVESHARE-ESP32-S3-GEEK
     id: helio_screen
-    rotation: 90
+    rotation: 0
     color_depth: 16
     update_interval: 5s
     lambda: |-
@@ -294,17 +332,49 @@ display:
       const uint32_t age = known ? (millis() - id(helio_battery_seen)) / 60000 : 0;
       const Color accent = !known || age >= 15 ? grey : battery <= 10 ? Color(245, 85, 75) :
           battery <= 20 ? Color(240, 180, 70) : Color(100, 210, 170);
-      it.print(16, 10, id(helio_screen_label), grey, "HELIO STRAP");
-      it.rectangle(201, 13, 22, 11, accent);
-      it.filled_rectangle(223, 16, 3, 5, accent);
-      if (known) it.filled_rectangle(203, 15, int(18 * battery / 100), 7, accent);
-      if (known) it.printf(120, 29, id(helio_screen_value), white, TextAlign::TOP_CENTER, "%.0f%%", battery);
-      else it.print(120, 29, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--%");
+      it.print(67, 7, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "HELIO STRAP");
+      if (known) it.printf(67, 30, id(helio_screen_value), accent, TextAlign::TOP_CENTER, "%.0f%%", battery);
+      else it.print(67, 30, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--%");
+      if (!known) it.print(67, 86, id(helio_screen_detail), grey, TextAlign::TOP_CENTER, "Waiting for battery");
+      else if (age == 0) it.print(67, 86, id(helio_screen_detail), grey, TextAlign::TOP_CENTER, "Battery read just now");
+      else it.printf(67, 86, id(helio_screen_detail), grey, TextAlign::TOP_CENTER, "Battery read %um ago", unsigned(age));
+      it.line(8, 108, 126, 108, Color(35, 42, 52));
+      it.print(67, 115, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "STRAP LINK");
       const auto link = id(helio).connection_indicator(millis());
       const Color link_color = link == 2 ? Color(100, 210, 170) : link == 1 ? Color(100, 165, 235) :
           link == 3 ? Color(240, 180, 70) : link == 4 ? Color(245, 85, 75) : grey;
-      it.filled_circle(20, 100, 4, link_color);
-      it.print(31, 91, id(helio_screen_detail), link_color, id(helio).connection_label(millis()));
-      if (!known) it.print(16, 112, id(helio_screen_detail), grey, "Battery not received yet");
-      else if (age == 0) it.print(16, 112, id(helio_screen_detail), grey, "Battery updated just now");
-      else it.printf(16, 112, id(helio_screen_detail), grey, "Battery last read %um ago", unsigned(age));
+      it.print(67, 136, id(helio_screen_detail), link_color, TextAlign::TOP_CENTER, id(helio).connection_label(millis()));
+      const auto bars = [&](int bottom, int count, const Color &color) {
+        for (int i = 0; i < 4; i++) {
+          const int height = 4 + i * 4;
+          it.filled_rectangle(12 + i * 7, bottom - height, 4, height,
+                              i < count ? color : Color(35, 42, 52));
+        }
+      };
+      if (id(helio_ble_signal_known)) {
+        const float rssi = id(helio_ble_signal);
+        const uint32_t signal_age = (millis() - id(helio_ble_signal_seen)) / 60000;
+        const Color signal_color = signal_age >= 15 ? grey : rssi >= -60 ? Color(100, 210, 170) :
+            rssi >= -75 ? Color(240, 180, 70) : Color(245, 85, 75);
+        bars(169, rssi >= -60 ? 4 : rssi >= -75 ? 3 : rssi >= -85 ? 2 : 1, signal_color);
+        it.printf(47, 150, id(helio_screen_label), signal_color, "%.0f dBm", rssi);
+        if (signal_age == 0) it.print(67, 175, id(helio_screen_detail), grey, TextAlign::TOP_CENTER, "Last signal just now");
+        else it.printf(67, 175, id(helio_screen_detail), grey, TextAlign::TOP_CENTER, "Last signal %um ago", unsigned(signal_age));
+      } else {
+        bars(169, 0, grey);
+        it.print(47, 150, id(helio_screen_label), grey, "-- dBm");
+        it.print(67, 175, id(helio_screen_detail), grey, TextAlign::TOP_CENTER, "No signal reading yet");
+      }
+      it.line(8, 194, 126, 194, Color(35, 42, 52));
+      it.print(67, 201, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "WI-FI");
+      const bool wifi_connected = wifi::global_wifi_component->is_connected();
+      if (wifi_connected && id(helio_wifi_rssi).has_state() && std::isfinite(id(helio_wifi_rssi).state)) {
+        const float rssi = id(helio_wifi_rssi).state;
+        const Color wifi_color = rssi >= -67 ? Color(100, 210, 170) :
+            rssi >= -75 ? Color(240, 180, 70) : Color(245, 85, 75);
+        bars(236, rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -75 ? 2 : 1, wifi_color);
+        it.printf(47, 219, id(helio_screen_label), wifi_color, "%.0f dBm", rssi);
+      } else {
+        bars(236, 0, grey);
+        it.print(47, 219, id(helio_screen_detail), grey, wifi_connected ? "Reading..." : "Offline");
+      }
