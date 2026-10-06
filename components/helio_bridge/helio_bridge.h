@@ -60,6 +60,7 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void set_personal_score_status(text_sensor::TextSensor *sensor) { personal_score_status_sensor_=sensor; }
   void set_personal_score_details(text_sensor::TextSensor *sensor) { personal_score_details_sensor_=sensor; }
   void set_score_target(float hours);
+  float displayed_personal_score() const;
   void set_smart_enabled(bool enabled) { smart_enabled_ = enabled; }
   void tick_smart(float hours, int early_minutes);
   void set_learning_enabled(bool value) {learning_enabled_=value;learning_publish_();}

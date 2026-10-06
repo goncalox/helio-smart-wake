@@ -7,6 +7,13 @@
 
 namespace esphome::helio_bridge {
 namespace { constexpr uint32_t SCORE_MAGIC=0x31535148U; }
+float HelioBridge::displayed_personal_score() const {
+  const auto *night=quality_?quality_->latest():nullptr;
+  const auto &helio=sleep_transfer_.night_score();
+  // A retained personal score must not be paired with another night's Helio score.
+  return night && helio.valid && night->onset==helio.onset && night->end==helio.end &&
+      std::isfinite(night->ours) ? night->ours : NAN;
+}
 void HelioBridge::set_score_target(float hours) {
   if(!quality_ || !std::isfinite(hours) || hours<6 || hours>10)return;
   const uint16_t target=std::lround(hours*60);

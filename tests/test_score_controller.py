@@ -19,6 +19,8 @@ struct HelioBridge {
  bool diagnostic_evict_(){evictions++;free_entries+=1000;return evictions<384;}
  bool follow_monitoring_(uint32_t) const{return following;}
  void set_score_target(float);
+ float displayed_personal_score() const;
+ sleep_data::Transfer sleep_transfer_;
 '''+members+r'''
 };
 }
@@ -41,11 +43,20 @@ int main(){
  b.setup_score_();assert(b.quality_ && b.quality_handle_ && std::isnan(score.value));
  assert(status.value.find("waiting for a completed night")!=std::string::npos);
  b.set_score_target(9);assert(b.quality_->target_minutes==540);b.set_score_target(NAN);b.set_score_target(0);assert(b.quality_->target_minutes==540);
- auto r=night();uint32_t lo=onset(r),end=lo+480*60;b.clock.now=end+3600;
+ auto r=night();u16(r,0x24c,480);uint32_t lo=onset(r),end=lo+480*60;b.clock.now=end+3600;
  activity(*b.quality_,lo,480);b.score_reference_(r.data(),r.size(),b.clock.now);
  assert(std::isfinite(score.value) && coverage.value==70 && b.audit_records==1 && b.audit.size()==108);
  assert(protocol::read32(b.audit.data())==1 && protocol::read32(b.audit.data()+4)==lo);
  assert(b.quality_->latest()->local_onset==ESPTime::from_epoch_local(lo).hour*60+ESPTime::from_epoch_local(lo).minute);
+ assert(std::isnan(b.displayed_personal_score()));
+ auto receive=[&](const Record &row){
+   assert(b.sleep_transfer_.start(row.size(),b.clock.now));
+   for(size_t i=0;i<row.size();++i){uint8_t packet[]={uint8_t(i),row[i]};assert(b.sleep_transfer_.feed(packet,2));}
+   assert(b.sleep_transfer_.complete(true,protocol::crc32(row.data(),row.size())));
+ };
+ receive(r);assert(b.displayed_personal_score()==score.value);
+ auto previous=night(MID-86400);u16(previous,0x24c,480);receive(previous);assert(std::isnan(b.displayed_personal_score()));
+ receive(r);
  b.score_reference_(r.data(),r.size(),b.clock.now+300);assert(b.audit_records==1);
  auto before=flash;fake_ms+=60001;b.phase_=HelioBridge::Phase::BUSY;b.score_tick_();assert(flash==before);
  b.phase_=HelioBridge::Phase::IDLE;b.queued_alarm_=true;b.score_tick_();assert(flash==before);

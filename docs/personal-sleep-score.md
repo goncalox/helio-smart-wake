@@ -88,7 +88,11 @@ This limitation is consistent with the need for external validation emphasized i
 
 Home Assistant receives **Helio Personal Sleep Score**, **Helio Personal Score Component Coverage**, **Helio Personal Score Status** and **Helio Personal Score Details**.
 
-The existing screen continues to show Helio's score, and the smart-wake alarm logic is unchanged.
+The screen keeps Helio's score at its original large size and adds our score in smaller parentheses on the same line, for example `78 (96)`.
+
+Only the parenthesized font shrinks for wider values such as `100 (100)`, and an unavailable or differently dated personal score shows `(--)`.
+
+The smart-wake alarm logic is unchanged.
 
 The model runs on the ESP32, retains 90 dated nightly summaries and keeps a three-day bounded minute cache; no computer is needed overnight.
 
