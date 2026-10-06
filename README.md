@@ -82,15 +82,16 @@ Changing the time selector alone does not write an alarm; press **Set Helio Alar
 and wait for **Saved and verified**.
 **Cancel Helio Alarm** cancels only the bridge-owned alarm after checking ownership.
 
-The dimmed, always-visible portrait display shows strap battery, reading age,
-recent contact status, Wi-Fi signal strength and the last Bluetooth signal strength,
-at 10% brightness by default.
-Signal strength is shown as bars and dBm; values nearer zero mean a stronger signal.
-Bluetooth RSSI is sampled once per existing connection and its age is shown,
-so normal idle disconnections do not imply a lost strap or a live signal measurement.
-Wi-Fi RSSI refreshes every 15 seconds and shows Offline when disconnected.
-Both signal sensors are also available as Home Assistant diagnostics.
+The dimmed, always-visible portrait display uses large numbers only: strap battery
+percentage and the last Bluetooth signal strength in dBm, with signal bars and a
+colored contact-status dot at 10% brightness by default.
+There are no Wi-Fi readings, headings or small status/age labels on the screen.
+Bluetooth RSSI is sampled once per existing connection; values nearer zero mean
+a stronger signal, and grey readings indicate unknown or stale information.
+The status dot is green for recent contact, blue while checking, amber for no
+recent contact, red after a failed check and grey before first contact.
 The connection indicator accounts for normal idle Bluetooth disconnections.
+Bluetooth signal is also available as a Home Assistant diagnostic.
 
 Settings are captured when a night is armed.
 To rearm with changed settings, disable smart wake, wait for verified cancellation,
