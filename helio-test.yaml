@@ -66,6 +66,14 @@ helio_bridge:
       then:
         - lambda: |-
             if (std::isfinite(x)) id(helio_score_seen) = millis();
+  personal_score:
+    name: Helio Personal Sleep Score
+  personal_score_coverage:
+    name: Helio Personal Score Component Coverage
+  personal_score_status:
+    name: Helio Personal Score Status
+  personal_score_details:
+    name: Helio Personal Score Details
   learning_status:
     name: Helio Model Learning Status
   model_stage:
@@ -153,6 +161,7 @@ interval:
   - interval: 10s
     then:
       - lambda: |-
+          id(helio).set_score_target(id(helio_sleep_target).state);
           id(helio).tick_smart(id(helio_sleep_target).state, int(id(helio_early_window).state));
 
 select:

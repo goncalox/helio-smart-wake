@@ -34,6 +34,10 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional("night_duration"): sensor.sensor_schema(unit_of_measurement="min", accuracy_decimals=0, state_class="measurement"),
     cv.Required("sleep_records"): sensor.sensor_schema(accuracy_decimals=0),
     cv.Optional("sleep_score"): sensor.sensor_schema(accuracy_decimals=0, state_class="measurement"),
+    cv.Optional("personal_score"): sensor.sensor_schema(accuracy_decimals=0, state_class="measurement"),
+    cv.Optional("personal_score_coverage"): sensor.sensor_schema(unit_of_measurement="%", accuracy_decimals=0, entity_category="diagnostic"),
+    cv.Optional("personal_score_status"): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+    cv.Optional("personal_score_details"): text_sensor.text_sensor_schema(entity_category="diagnostic"),
     cv.Optional("learning_status"): text_sensor.text_sensor_schema(entity_category="diagnostic"),
     cv.Required("model_stage"): text_sensor.text_sensor_schema(),
     cv.Required("smart_status"): text_sensor.text_sensor_schema(),
@@ -57,6 +61,12 @@ async def to_code(config):
         cg.add(getattr(var, f"set_{key}")(await text_sensor.new_text_sensor(config[key])))
     for key in ("sleep_age", "sleep_duration", "sleep_records", "smart_awake", "sleep_awake"):
         cg.add(getattr(var, f"set_{key}")(await sensor.new_sensor(config[key])))
+    for key in ("personal_score", "personal_score_coverage"):
+        if key in config:
+            cg.add(getattr(var, f"set_{key}")(await sensor.new_sensor(config[key])))
+    for key in ("personal_score_status", "personal_score_details"):
+        if key in config:
+            cg.add(getattr(var, f"set_{key}")(await text_sensor.new_text_sensor(config[key])))
     if "learning_status" in config:
         cg.add(var.set_learning_status(await text_sensor.new_text_sensor(config["learning_status"])))
     if "sleep_score" in config:

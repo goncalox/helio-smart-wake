@@ -83,6 +83,7 @@ void HelioBridge::activity_control_(const std::vector<uint8_t> &data) {
     protocol::write32(observation+4, wear_.sample); protocol::write32(observation+8, wear_.read_at);
     diagnostic_append_(13, observation, sizeof(observation));
     update_model_(activity_transfer_.raw.data(), activity_transfer_.raw.size(), activity_transfer_.start_time);
+    score_activity_(activity_transfer_.raw.data(),activity_transfer_.raw.size(),activity_transfer_.start_time);
     activity_transfer_.raw.clear();
     close_requested_ = true;
     return;

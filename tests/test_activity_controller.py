@@ -27,7 +27,8 @@ class HelioBridge { public:
  smart_wake::Wear wear_{};
  bool following=false;
  bool follow_monitoring_(uint32_t) const { return following; }
- int model_calls=0;
+ int model_calls=0,score_calls=0;
+ void score_activity_(const uint8_t*,size_t,uint32_t){++score_calls;}
  void update_model_(const uint8_t*,size_t,uint32_t){++model_calls;}
  enum class Phase { IDLE, SLEEP_ACK, ACTIVITY_START, ACTIVITY_DATA, ACTIVITY_ACK, CLOSING };
  Phase phase_=Phase::SLEEP_ACK; bool queued_alarm_=false,activity_attempted_=false,sleep_encrypted_=true,close_requested_=false;
@@ -57,19 +58,19 @@ int main() {
  a.activity_control_(header); assert(a.phase_==HelioBridge::Phase::ACTIVITY_DATA && a.sent==std::vector<uint8_t>{2});
  uint8_t data[]={0,120,2,0,60,0,0,0,0}; a.activity_bulk_(data,9);
  a.activity_control_({16,2,1}); assert(a.recorded.empty() && a.sent==std::vector<uint8_t>({3,9}));
- a.activity_control_({16,3,1}); assert(a.recorded.size()==25 && a.close_requested_ && a.model_calls==1);
+ a.activity_control_({16,3,1}); assert(a.recorded.size()==25 && a.close_requested_ && a.model_calls==1 && a.score_calls==1);
  assert(a.read_health_.activity.seen && !a.read_health_.activity.failed);
  assert(!a.begin_activity_()); // At most every four minutes, even if sleep polls faster.
  a.smart_enabled_=true;a.smart_session_.onset=a.clock_->utcnow().timestamp-8*3600;a.smart_session_.settings.early_minutes=30;
  fake_ms+=61000;assert(a.begin_activity_()); // Model reads refresh every minute in the early window.
  a.smart_enabled_=false;a.following=true;fake_ms+=61000;assert(a.begin_activity_()); // Post-alarm worn monitoring also refreshes every minute.
  HelioBridge b; assert(b.begin_activity_()); b.activity_control_(header);
- data[0]=1; b.activity_bulk_(data,9); assert(b.recorded.empty() && b.model_calls==0 && b.phase_==HelioBridge::Phase::CLOSING);
+ data[0]=1; b.activity_bulk_(data,9); assert(b.recorded.empty() && b.model_calls==0 && b.score_calls==0 && b.phase_==HelioBridge::Phase::CLOSING);
  assert(b.read_health_.activity.failed && !b.read_health_.activity.seen);
  HelioBridge c; assert(c.begin_activity_()); c.activity_control_(header);
- data[0]=0; c.activity_bulk_(data,9); c.activity_control_({16,2,1,0,0,0,0}); assert(c.recorded.empty() && c.model_calls==0);
+ data[0]=0; c.activity_bulk_(data,9); c.activity_control_({16,2,1,0,0,0,0}); assert(c.recorded.empty() && c.model_calls==0 && c.score_calls==0);
  HelioBridge d; assert(d.begin_activity_()); d.activity_control_(header); d.activity_bulk_(data,9);
- d.activity_control_({16,2,1}); d.activity_control_({16,3,0}); assert(d.recorded.empty() && d.model_calls==0);
+ d.activity_control_({16,2,1}); d.activity_control_({16,3,0}); assert(d.recorded.empty() && d.model_calls==0 && d.score_calls==0);
  // Intentional alarm preemption is not a failed Bluetooth read.
  a.activity_stop_("Activity read preempted for alarm",false);
  assert(!a.read_health_.activity.failed);

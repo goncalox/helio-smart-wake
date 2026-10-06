@@ -58,6 +58,21 @@ def decode_blob(blob, sequence):
                         gate_policy='both-Light' if payload[0]==1 else 'both-Light-or-Awake',
                         **dict(zip(names,fields)))
             if payload[0]==1: item['model_light_ready']=bool(flags&8)
+        elif kind == 19:
+            if size != 108 or struct.unpack_from('<I',payload)[0] != 1:
+                raise ValueError('unknown personal sleep score layout')
+            names=('version','onset','end','observed','changed','first_at','signature','baseline_nights',
+                   'target_minutes','available_components','helio_score','first_helio_score')
+            score=dict(zip(names,struct.unpack_from('<12I',payload)))
+            names=('score','first_score','component_coverage','activity_coverage','mean_hr','mean_movement',
+                   'duration','continuity','timing','heart_rate','movement')
+            score.update(zip(names,struct.unpack_from('<11f',payload,48)))
+            score.update(zip(('asleep_minutes','awake_minutes','awakening_bouts','activity_minutes','hr_minutes','local_onset'),
+                             struct.unpack_from('<6H',payload,92)))
+            score['settled']=bool(struct.unpack_from('<I',payload,104)[0])
+            for key in ('helio_score','first_helio_score'):
+                if score[key]==255: score[key]=None
+            item.update(kind='personal_sleep_score',score=score)
         elif kind == 18:
             if size!=548 or struct.unpack_from('<I',payload)[0]!=1: raise ValueError('unknown adaptive model audit layout')
             names=('format','champion_version','candidate_version','trained_through','checked_through','evaluated_nights','promotions','rejections','candidate_created')

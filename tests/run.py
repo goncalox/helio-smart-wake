@@ -13,7 +13,7 @@ COMPONENT = ROOT / 'components/helio_bridge'
 def run(*args):
     subprocess.run(list(args), check=True)
 
-for name in ('protocol', 'alarms', 'sleep', 'activity', 'smart', 'dual_light', 'follow', 'adaptive', 'read_health'):
+for name in ('protocol', 'alarms', 'sleep', 'activity', 'smart', 'dual_light', 'follow', 'adaptive', 'read_health', 'sleep_score'):
     output = BUILD / name
     run('c++', '-std=c++17', '-I' + str(COMPONENT),
         str(ROOT / f'tests/test_{name}.cpp'), '-o', str(output))
@@ -45,6 +45,6 @@ run(str(BUILD / 'follow-alarms'))
 run('cc', '-shared', '-fPIC', str(COMPONENT / 'ecdh.c'), '-o', str(BUILD / 'libhelio_ecdh.dylib'))
 for script in ('test_ecdh.py', 'test_shadow.py', 'test_stage_model.py',
                'test_activity_controller.py', 'test_learning_controller.py', 'test_adaptive_logging.py', 'test_onboard_logging.py',
-               'test_model_firmware_parity.py'):
+               'test_model_firmware_parity.py', 'test_score_controller.py'):
     run(sys.executable, str(ROOT / 'tests' / script))
 print('All host regression checks passed.')

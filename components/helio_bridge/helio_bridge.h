@@ -12,6 +12,7 @@
 #include "smart_wake.h"
 #include "adaptive_model.h"
 #include "read_health.h"
+#include "sleep_score_model.h"
 #include <deque>
 #include <nvs.h>
 #include <array>
@@ -54,6 +55,11 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void set_night_duration(sensor::Sensor *sensor) { night_duration_sensor_ = sensor; }
   void set_sleep_records(sensor::Sensor *sensor) { sleep_records_sensor_ = sensor; }
   void set_sleep_score(sensor::Sensor *sensor) { sleep_score_sensor_ = sensor; }
+  void set_personal_score(sensor::Sensor *sensor) { personal_score_sensor_=sensor; }
+  void set_personal_score_coverage(sensor::Sensor *sensor) { personal_score_coverage_sensor_=sensor; }
+  void set_personal_score_status(text_sensor::TextSensor *sensor) { personal_score_status_sensor_=sensor; }
+  void set_personal_score_details(text_sensor::TextSensor *sensor) { personal_score_details_sensor_=sensor; }
+  void set_score_target(float hours);
   void set_smart_enabled(bool enabled) { smart_enabled_ = enabled; }
   void tick_smart(float hours, int early_minutes);
   void set_learning_enabled(bool value) {learning_enabled_=value;learning_publish_();}
@@ -123,6 +129,17 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void activity_stop_(const char *reason, bool failed = true);
   void activity_control_(const std::vector<uint8_t> &data);
   void activity_bulk_(const uint8_t *data, size_t size);
+  sleep_score::Model *quality_{nullptr};
+  nvs_handle_t quality_handle_{0};
+  uint32_t quality_flush_at_{0},quality_publish_at_{0};
+  bool quality_urgent_{false};
+  sensor::Sensor *personal_score_sensor_{nullptr},*personal_score_coverage_sensor_{nullptr};
+  text_sensor::TextSensor *personal_score_status_sensor_{nullptr},*personal_score_details_sensor_{nullptr};
+  std::string quality_error_;
+  void setup_score_(); bool save_score_(); void score_tick_(); void score_publish_();
+  void score_activity_(const uint8_t *raw,size_t size,uint32_t start);
+  void score_reference_(const uint8_t *raw,size_t size,uint32_t now);
+  void score_audit_(const sleep_score::Night &night,uint32_t now);
   adaptive::Learner *learning_{nullptr};
   nvs_handle_t learning_handle_{0};
   bool learning_enabled_{true},learning_automatic_{true};

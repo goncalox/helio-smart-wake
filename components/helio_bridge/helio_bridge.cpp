@@ -23,6 +23,7 @@ void HelioBridge::setup() {
   alarm_status_(owned_.valid ? "Checking saved alarm" : "No alarm set by bridge");
   setup_smart_();
   setup_learning_();
+  setup_score_();
   status_("Ready for connection test");
   set_timeout("initial_test", 15000, [this]() { test_connection(); });
   sleep_status_("Waiting for first sleep read");
@@ -170,6 +171,7 @@ void HelioBridge::close_() {
 void HelioBridge::loop() {
   diagnostic_tick_();
   learning_tick_();
+  score_tick_();
   const auto now = millis();
   if (phase_ == Phase::IDLE) {
     if (queued_alarm_) {

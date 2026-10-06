@@ -8,6 +8,16 @@ Home Assistant provides controls and status; runtime timing, inference and
 alarm scheduling run on the ESP32 without an always-on computer or Home Assistant.
 Once successfully saved, an alarm runs on the strap itself.
 
+## Personal sleep-quality score
+
+A separate experimental **0–100 personal sleep score** runs on the ESP32 using
+nighttime duration, interruptions, timing, heart rate and movement.
+It needs no daily ratings or daytime readings and does not learn toward Helio's score.
+Personal baselines adapt after seven eligible prior nights; missing components and
+provisional records are visible in Home Assistant and the onboard comparison audit.
+This is a heuristic pilot, not a validated predictor or proven improvement over Helio.
+See [formula, adaptation and comparison limits](docs/personal-sleep-score.md).
+
 ## Wake behavior
 
 - Wait for stable night sleep onset: at least 90 minutes of recorded night data
@@ -38,8 +48,7 @@ Once successfully saved, an alarm runs on the strap itself.
 
 Factory defaults are **8.5 hours**, a **15-minute early window**, smart wake
 **off**, and sleep monitoring **on**.
-The existing installation uses a saved **60-minute window** with smart wake on;
-saved settings override defaults and are not stored in this repository.
+Saved settings override defaults and are not stored in this repository.
 The early-window control accepts **0–60 minutes** in five-minute steps.
 The configured timezone is `Europe/Lisbon`; edit `helio-test.yaml` for another zone.
 
