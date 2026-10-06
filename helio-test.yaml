@@ -73,6 +73,13 @@ helio_bridge:
     name: Helio Recorded Sleep Duration
   sleep_records:
     name: Helio Sleep Records Read
+  sleep_score:
+    id: helio_sleep_score
+    name: Helio Sleep Score
+    on_value:
+      then:
+        - lambda: |-
+            if (std::isfinite(x)) id(helio_score_seen) = millis();
   learning_status:
     name: Helio Model Learning Status
   model_stage:
@@ -284,6 +291,10 @@ esphome:
           brightness: 10%
 
 globals:
+  - id: helio_score_seen
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
   - id: helio_battery_seen
     type: uint32_t
     restore_value: false
@@ -303,6 +314,10 @@ globals:
 
 font:
   - file: "gfonts://Roboto"
+    id: helio_screen_label
+    size: 16
+    glyphs: "BAT SIGLEP"
+  - file: "gfonts://Roboto"
     id: helio_screen_value
     size: 48
     glyphs: "0123456789% -"
@@ -315,30 +330,38 @@ display:
     color_depth: 16
     update_interval: 5s
     lambda: |-
-      const Color grey(140, 150, 162);
+      const Color grey(140, 150, 162), white(230, 235, 240);
       const bool known = id(helio_strap_battery).has_state() && std::isfinite(id(helio_strap_battery).state);
       const float battery = known ? id(helio_strap_battery).state : 0;
       const uint32_t age = known ? (millis() - id(helio_battery_seen)) / 60000 : 0;
       const Color accent = !known || age >= 15 ? grey : battery <= 10 ? Color(245, 85, 75) :
           battery <= 20 ? Color(240, 180, 70) : Color(100, 210, 170);
-      if (known) it.printf(67, 32, id(helio_screen_value), accent, TextAlign::TOP_CENTER, "%.0f%%", battery);
-      else it.print(67, 32, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--%");
+      it.print(67, 2, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "BAT");
+      if (known) it.printf(67, 22, id(helio_screen_value), accent, TextAlign::TOP_CENTER, "%.0f%%", battery);
+      else it.print(67, 22, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--%");
+      it.print(67, 82, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "SIG");
       const auto link = id(helio).connection_indicator(millis());
       const Color link_color = link == 2 ? Color(100, 210, 170) : link == 1 ? Color(100, 165, 235) :
           link == 3 ? Color(240, 180, 70) : link == 4 ? Color(245, 85, 75) : grey;
-      it.filled_circle(67, 111, 5, link_color);
+      it.filled_circle(14, 91, 4, link_color);
       if (id(helio_ble_signal_known)) {
         const float rssi = id(helio_ble_signal);
         const uint32_t signal_age = (millis() - id(helio_ble_signal_seen)) / 60000;
         const bool stale = signal_age >= 15 || link == 3 || link == 4;
         const Color signal_color = stale ? grey : rssi >= -60 ? Color(100, 210, 170) :
             rssi >= -75 ? Color(240, 180, 70) : Color(245, 85, 75);
-        it.printf(67, 135, id(helio_screen_value), signal_color, TextAlign::TOP_CENTER, "%.0f", rssi);
+        it.printf(67, 102, id(helio_screen_value), signal_color, TextAlign::TOP_CENTER, "%.0f", rssi);
         const int count = rssi >= -60 ? 4 : rssi >= -75 ? 3 : rssi >= -85 ? 2 : 1;
         for (int i = 0; i < count; i++) {
-          const int height = 10 + i * 10;
-          it.filled_rectangle(39 + i * 16, 225 - height, 10, height, signal_color);
+          const int height = 3 + i * 3;
+          it.filled_rectangle(101 + i * 6, 95 - height, 4, height, signal_color);
         }
       } else {
-        it.print(67, 135, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--");
+        it.print(67, 102, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--");
       }
+      it.print(67, 162, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "SLEEP");
+      const bool score_known = id(helio_sleep_score).has_state() && std::isfinite(id(helio_sleep_score).state);
+      const bool score_fresh = score_known && uint32_t(millis() - id(helio_score_seen)) < 900000U;
+      if (score_known) it.printf(67, 182, id(helio_screen_value), score_fresh ? white : grey,
+                                 TextAlign::TOP_CENTER, "%.0f", id(helio_sleep_score).state);
+      else it.print(67, 182, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--");

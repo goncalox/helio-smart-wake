@@ -32,6 +32,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Required("sleep_age"): sensor.sensor_schema(unit_of_measurement="min", accuracy_decimals=1, state_class="measurement"),
     cv.Required("sleep_duration"): sensor.sensor_schema(unit_of_measurement="min", accuracy_decimals=0, state_class="measurement"),
     cv.Required("sleep_records"): sensor.sensor_schema(accuracy_decimals=0),
+    cv.Optional("sleep_score"): sensor.sensor_schema(accuracy_decimals=0, state_class="measurement"),
     cv.Optional("learning_status"): text_sensor.text_sensor_schema(entity_category="diagnostic"),
     cv.Required("model_stage"): text_sensor.text_sensor_schema(),
     cv.Required("smart_status"): text_sensor.text_sensor_schema(),
@@ -57,5 +58,7 @@ async def to_code(config):
         cg.add(getattr(var, f"set_{key}")(await sensor.new_sensor(config[key])))
     if "learning_status" in config:
         cg.add(var.set_learning_status(await text_sensor.new_text_sensor(config["learning_status"])))
+    if "sleep_score" in config:
+        cg.add(var.set_sleep_score(await sensor.new_sensor(config["sleep_score"])))
     for key in ("model_stage", "smart_status", "smart_alarm", "smart_target"):
         cg.add(getattr(var, f"set_{key}")(await text_sensor.new_text_sensor(config[key])))

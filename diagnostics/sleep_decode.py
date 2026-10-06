@@ -11,6 +11,7 @@ def decode_record(raw):
     base = struct.unpack_from('<I', raw, 4)[0] - 86400
     result = dict(base=base, onset=base + u16(10) * 60,
                   end=base + u16(12) * 60,
+                  sleep_score=raw[0x16] if raw[0x16] <= 100 else None,
                   totals=dict(zip(('REM', 'Light', 'Deep', 'Awake'),
                                   (u16(p) for p in (0x24a, 0x24c, 0x24e, 0x250)))))
     for block, name in enumerate(('night', 'day')):

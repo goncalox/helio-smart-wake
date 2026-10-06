@@ -49,6 +49,7 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void set_sleep_age(sensor::Sensor *sensor) { sleep_age_sensor_ = sensor; }
   void set_sleep_duration(sensor::Sensor *sensor) { sleep_duration_sensor_ = sensor; }
   void set_sleep_records(sensor::Sensor *sensor) { sleep_records_sensor_ = sensor; }
+  void set_sleep_score(sensor::Sensor *sensor) { sleep_score_sensor_ = sensor; }
   void set_smart_enabled(bool enabled) { smart_enabled_ = enabled; }
   void tick_smart(float hours, int early_minutes);
   void set_learning_enabled(bool value) {learning_enabled_=value;learning_publish_();}
@@ -105,6 +106,7 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   text_sensor::TextSensor *sleep_status_sensor_{nullptr}, *sleep_stage_sensor_{nullptr}, *sleep_through_sensor_{nullptr};
   text_sensor::TextSensor *sleep_onset_sensor_{nullptr}, *sleep_sync_sensor_{nullptr}, *sleep_changed_sensor_{nullptr};
   sensor::Sensor *sleep_age_sensor_{nullptr}, *sleep_duration_sensor_{nullptr}, *sleep_records_sensor_{nullptr};
+  sensor::Sensor *sleep_score_sensor_{nullptr};
   sleep_data::Transfer sleep_transfer_;
   activity_data::Transfer activity_transfer_;
   std::vector<uint8_t> activity_header_;

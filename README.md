@@ -76,22 +76,27 @@ Alarm times use the strap's existing local clock; this component does not set it
 ## Controls and display
 
 Home Assistant exposes battery, connection, sleep freshness, clock sync,
-recorded awake time, model stage, smart target, saved alarm and operation status.
+recorded awake time, strap sleep score, model stage, smart target, saved alarm and operation status.
 Manual alarm controls offer Once, Every day, Weekdays and Weekends.
 Changing the time selector alone does not write an alarm; press **Set Helio Alarm**
 and wait for **Saved and verified**.
 **Cancel Helio Alarm** cancels only the bridge-owned alarm after checking ownership.
 
-The dimmed, always-visible portrait display uses large numbers only: strap battery
-percentage and the last Bluetooth signal strength in dBm, with signal bars and a
-colored contact-status dot at 10% brightness by default.
-There are no Wi-Fi readings, headings or small status/age labels on the screen.
+The dimmed, always-visible portrait display shows three large values with short
+labels: **BAT** for strap battery percentage, **SIG** for the last Bluetooth signal
+strength in dBm, and **SLEEP** for the strap's latest nightly sleep score (0–100).
+It stays upright at 10% brightness, with no Wi-Fi readings or detailed status text.
+Unknown readings show dashes and stale readings fade grey.
+The sleep score is read from byte `0x16` of the validated sleep record, matching
+Gadgetbridge's Huami decoder; it is not computed by our model and does not affect alarms.
+It can change during the night or in later strap revisions.
+The latest valid night is selected independently of newer naps and record arrival order.
+The sleep score is also exposed to Home Assistant and decoded in downloaded logs.
 Bluetooth RSSI is sampled once per existing connection; values nearer zero mean
-a stronger signal, and grey readings indicate unknown or stale information.
-The status dot is green for recent contact, blue while checking, amber for no
-recent contact, red after a failed check and grey before first contact.
-The connection indicator accounts for normal idle Bluetooth disconnections.
-Bluetooth signal is also available as a Home Assistant diagnostic.
+a stronger signal, with compact signal bars beside its label.
+The contact-status dot is green for recent contact, blue while checking, amber
+for no recent contact, red after a failed check and grey before first contact.
+Normal idle Bluetooth disconnections do not imply the strap is unreachable.
 
 Settings are captured when a night is armed.
 To rearm with changed settings, disable smart wake, wait for verified cancellation,

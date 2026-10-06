@@ -90,6 +90,10 @@ void HelioBridge::finish_sleep_() {
   diagnostic_sleep_.clear();
   publish_timestamp_(sleep_sync_sensor_, now);
   sleep_records_sensor_->publish_state(sleep_transfer_.records());
+  if (sleep_score_sensor_ != nullptr) {
+    const auto &score = sleep_transfer_.night_score();
+    sleep_score_sensor_->publish_state(score.valid ? score.value : NAN);
+  }
   const auto &latest = sleep_transfer_.latest();
   sleep_awake_sensor_->publish_state(latest.valid && latest.accounting_complete && !latest.is_nap ? latest.awake_minutes : NAN);
   smart_observe_(latest, now);

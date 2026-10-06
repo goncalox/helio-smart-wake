@@ -23,6 +23,7 @@ Record night() {
 }
 int main() {
   auto r = night();
+  r[0x16] = 78;
   Snapshot s;
   assert(decode(r.data(), r.size(), now, s));
   assert(s.onset == base + 1320 * 60 && s.end == base + 1800 * 60);
@@ -65,6 +66,18 @@ int main() {
   assert(decode(nap.data(), nap.size(), now, s));
   assert(s.onset == base + 2000 * 60 && s.through == base + 2030 * 60 && s.stage == 5 && s.sleep_minutes == 30);
   assert(s.is_nap && !s.accounting_complete && s.awake_minutes == 0);
+  const auto night_score = decode_night_score(nap.data(), nap.size(), now);
+  assert(night_score.valid && night_score.value == 78 && night_score.onset == base + 1320 * 60);
+  auto invalid_score = r; invalid_score[0x16] = 255;
+  assert(decode(invalid_score.data(), invalid_score.size(), now, s)); // Score cannot invalidate alarm data.
+  assert(!decode_night_score(invalid_score.data(), invalid_score.size(), now).valid);
+  auto nap_only = nap; u16(nap_only, 10, 0); u16(nap_only, 12, 65535);
+  u16(nap_only, 0x24a, 0); u16(nap_only, 0x24c, 0); u16(nap_only, 0x24e, 0);
+  nap_only[0x54] = 0; nap_only[0x16] = 99;
+  assert(decode(nap_only.data(), nap_only.size(), now, s) && s.is_nap);
+  assert(!decode_night_score(nap_only.data(), nap_only.size(), now).valid);
+  assert(!decode_night_score(ongoing.data(), ongoing.size(), now).valid);
+  assert(!decode_night_score(r.data(), r.size()-1, now).valid);
   auto bad = r;
   bad[0x54] = 51;
   assert(!decode(bad.data(), bad.size(), now, s));
@@ -90,6 +103,19 @@ int main() {
   assert(!transfer.complete(true, 0));
   assert(transfer.records() == 2 && transfer.usable() == 2 && transfer.latest().stage == 5);
   assert(transfer.latest().onset == base + 2000 * 60);
+  assert(transfer.night_score().valid && transfer.night_score().value == 78);
+  // A newer nap-only row or a later-arriving older night cannot replace the newest night score.
+  auto older = r; protocol::write32(older.data()+4, midnight-86400); older[0x16] = 94;
+  raw.assign(nap.begin(), nap.end()); raw.insert(raw.end(), older.begin(), older.end());
+  raw.insert(raw.end(), nap_only.begin(), nap_only.end());
+  assert(transfer.start(raw.size(), now));
+  for (unsigned i=0; i<raw.size(); ++i) {
+    uint8_t packet[]{uint8_t(i),raw[i]}; assert(transfer.feed(packet,sizeof(packet)));
+  }
+  assert(transfer.complete(true,protocol::crc32(raw.data(),raw.size())));
+  assert(transfer.night_score().valid && transfer.night_score().value==78);
+  assert(transfer.night_score().onset==base+1320*60);
+  assert(transfer.start(0, now) && !transfer.night_score().valid);
   assert(transfer.start(RECORD_SIZE, now));
   uint8_t first[]{0, r[0]}, skipped[]{2, r[1]};
   assert(transfer.feed(first, sizeof(first)));

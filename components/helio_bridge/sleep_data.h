@@ -113,6 +113,25 @@ inline bool decode(const uint8_t *p, size_t size, uint32_t now, Snapshot &result
   return result.valid;
 }
 
+// The nightly score is independent of a newer daytime nap's stage timeline.
+struct NightScore {
+  uint32_t onset{}, end{};
+  uint8_t value{};
+  bool valid{};
+};
+inline NightScore decode_night_score(const uint8_t *p, size_t size, uint32_t now) {
+  Snapshot validated;
+  if (!decode(p, size, now, validated)) return {};
+  const unsigned start = protocol::read16(p + 10), end = protocol::read16(p + 12);
+  const unsigned minutes = unsigned(protocol::read16(p + 0x24a)) +
+      protocol::read16(p + 0x24c) + protocol::read16(p + 0x24e);
+  const uint32_t base = protocol::read32(p + 4) - 86400;
+  if (!p[0x54] || start >= end || end > 4320 || end - start > 1440 ||
+      !minutes || minutes > 1440 || p[0x16] > 100 ||
+      uint64_t(base) + end * 60 > uint64_t(now) + 300) return {};
+  return {base + start * 60, base + end * 60, p[0x16], true};
+}
+
 // Fixed-memory streaming receiver; publication waits for full length and CRC validation.
 class Transfer {
  public:
@@ -136,6 +155,9 @@ class Transfer {
           usable_++;
           if (!latest_.valid || std::max(candidate.through, candidate.end) >= std::max(latest_.through, latest_.end)) latest_ = candidate;
         } else rejected_++;
+        const auto score = decode_night_score(record_.data(), record_.size(), now_);
+        if (score.valid && (!night_score_.valid || score.onset > night_score_.onset ||
+            (score.onset == night_score_.onset && score.end >= night_score_.end))) night_score_ = score;
       }
     }
     return true;
@@ -146,8 +168,10 @@ class Transfer {
   unsigned usable() const { return usable_; }
   unsigned rejected() const { return rejected_; }
   const Snapshot &latest() const { return latest_; }
+  const NightScore &night_score() const { return night_score_; }
  private:
   std::array<uint8_t, RECORD_SIZE> record_{};
+  NightScore night_score_{};
   Snapshot latest_{};
   uint32_t expected_{}, received_{}, now_{}, crc_{0xffffffffU};
   unsigned usable_{}, rejected_{};
