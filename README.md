@@ -11,11 +11,15 @@ Once successfully saved, an alarm runs on the strap itself.
 ## Personal sleep-quality score
 
 A separate experimental **0–100 personal sleep score** runs on the ESP32 using
-nighttime duration, interruptions, timing, heart rate and movement.
+nighttime duration, awakening length/clusters, timing, heart-rate patterns,
+movement bursts and recent short nights.
 It needs no daily ratings or daytime readings and does not learn toward Helio's score.
-Personal baselines adapt after seven eligible prior nights; missing components and
+Personal timing/physiological baselines adapt after seven eligible prior nights,
+with short-night context available after three; missing components and
 provisional records are visible in Home Assistant and the onboard comparison audit.
 This is a heuristic pilot, not a validated predictor or proven improvement over Helio.
+The v2 upgrade preserves v1 scores and recovers available recent minute data from
+the ESP32's existing logs without requiring a computer.
 See [formula, adaptation and comparison limits](docs/personal-sleep-score.md).
 
 ## Wake behavior

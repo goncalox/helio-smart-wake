@@ -26,6 +26,12 @@ def summarize(events):
             settled=s['settled'], asleep_minutes=s['asleep_minutes'], awake_minutes=s['awake_minutes'],
             awakening_bouts=s['awakening_bouts'], prior_baseline_nights=s['baseline_nights'],
             available_components=s['available_components'],
+            longest_awake_minutes=s.get('longest_awake_minutes'), wake_cluster_30m=s.get('wake_cluster_30m'),
+            hr_minute_change=s.get('hr_minute_change'), hr_late_minus_early=s.get('hr_late_minus_early'),
+            movement_bursts=s.get('movement_bursts'), longest_movement_burst=s.get('longest_movement_burst'),
+            recent_history_nights=s.get('recent_history_nights'), recent_shortfall_fraction=s.get('recent_shortfall_fraction'),
+            previous_version=s.get('previous_version'), previous_score=s.get('previous_score'),
+            previous_first_score=s.get('previous_first_score'), previous_component_coverage=s.get('previous_component_coverage'),
         ) for _, s in sorted(nights.items(), key=lambda x: (x[0][1], x[0][0]))]
     }
 

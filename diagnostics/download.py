@@ -59,7 +59,7 @@ def decode_blob(blob, sequence):
                         **dict(zip(names,fields)))
             if payload[0]==1: item['model_light_ready']=bool(flags&8)
         elif kind == 19:
-            if size != 108 or struct.unpack_from('<I',payload)[0] != 1:
+            if size not in (108,176) or (size == 108 and struct.unpack_from('<I',payload)[0] != 1) or (size == 176 and struct.unpack_from('<I',payload)[0] != 2):
                 raise ValueError('unknown personal sleep score layout')
             names=('version','onset','end','observed','changed','first_at','signature','baseline_nights',
                    'target_minutes','available_components','helio_score','first_helio_score')
@@ -72,6 +72,17 @@ def decode_blob(blob, sequence):
             score['settled']=bool(struct.unpack_from('<I',payload,104)[0])
             for key in ('helio_score','first_helio_score'):
                 if score[key]==255: score[key]=None
+            if size == 176:
+                score.update(zip(('previous_version','previous_first_at'),struct.unpack_from('<2I',payload,108)))
+                score.update(zip(('previous_score','previous_first_score','previous_component_coverage','recent_shortfall',
+                                  'hr_minute_change','hr_late_minus_early','hr_minute_sd','recent_shortfall_fraction'),
+                                 struct.unpack_from('<8f',payload,116)))
+                score.update(zip(('longest_awake_minutes','wake_cluster_30m','late_awake_minutes','restless_minutes',
+                                  'movement_bursts','longest_movement_burst','hr_adjacent_pairs','recent_history_nights'),
+                                 struct.unpack_from('<8H',payload,148)))
+                score.update(zip(('pattern_flags','previous_helio','previous_first_helio'),struct.unpack_from('<3I',payload,164)))
+                for key in ('previous_helio','previous_first_helio'):
+                    if score[key]==255: score[key]=None
             item.update(kind='personal_sleep_score',score=score)
         elif kind == 18:
             if size!=548 or struct.unpack_from('<I',payload)[0]!=1: raise ValueError('unknown adaptive model audit layout')

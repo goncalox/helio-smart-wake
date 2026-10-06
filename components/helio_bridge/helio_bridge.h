@@ -134,6 +134,8 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   nvs_handle_t quality_handle_{0};
   uint32_t quality_flush_at_{0},quality_publish_at_{0};
   bool quality_urgent_{false};
+  uint32_t quality_replay_seq_{0},quality_replay_end_{0},quality_replay_at_{0};
+  void score_replay_();
   sensor::Sensor *personal_score_sensor_{nullptr},*personal_score_coverage_sensor_{nullptr};
   text_sensor::TextSensor *personal_score_status_sensor_{nullptr},*personal_score_details_sensor_{nullptr};
   std::string quality_error_;

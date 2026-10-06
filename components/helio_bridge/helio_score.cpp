@@ -1,4 +1,5 @@
 #include "helio_bridge.h"
+#include "diagnostic_codec.h"
 #include "esphome/core/log.h"
 #include "esphome/core/hal.h"
 #include <esp_heap_caps.h>
@@ -30,18 +31,27 @@ void HelioBridge::setup_score_() {
   if(nvs_open("helio_score_v1",NVS_READWRITE,&quality_handle_)!=ESP_OK) {
     quality_handle_=0;quality_error_="Unavailable: score storage could not open";score_publish_();return;
   }
-  size_t size=0;
+  size_t size=0;bool migrated=false;
   if(nvs_get_blob(quality_handle_,"database",nullptr,&size)==ESP_OK) {
-    bool good=size==sizeof(sleep_score::Model)+16;
+    const bool current=size==sizeof(sleep_score::Model)+16,legacy=size==sizeof(sleep_score_v1::Model)+16;
+    bool good=current||legacy;
     std::vector<uint8_t> blob(good?size:0);
+    if(legacy)new(blob.data()+16) sleep_score_v1::Model();
     if(good)good=nvs_get_blob(quality_handle_,"database",blob.data(),&size)==ESP_OK &&
-      protocol::read32(blob.data())==SCORE_MAGIC && protocol::read32(blob.data()+4)==sleep_score::VERSION &&
-      protocol::read32(blob.data()+8)==sizeof(sleep_score::Model) &&
-      protocol::read32(blob.data()+12)==protocol::crc32(blob.data()+16,sizeof(sleep_score::Model));
-    if(good){memcpy(quality_,blob.data()+16,sizeof(*quality_));good=quality_->valid();}
+      protocol::read32(blob.data())==SCORE_MAGIC &&
+      protocol::read32(blob.data()+8)==size-16 &&
+      protocol::read32(blob.data()+12)==protocol::crc32(blob.data()+16,size-16);
+    if(good && current && protocol::read32(blob.data()+4)==sleep_score::VERSION) {
+      memcpy(quality_,blob.data()+16,sizeof(*quality_));good=quality_->valid();
+    } else if(good && legacy && protocol::read32(blob.data()+4)==1) {
+      good=quality_->migrate(*reinterpret_cast<const sleep_score_v1::Model*>(blob.data()+16));migrated=good;
+    } else good=false;
     if(!good){quality_->~Model();new(quality_) sleep_score::Model();diagnostic_text_(8,"Personal score storage rejected; collecting fresh nights");}
   }
-  quality_->dirty=false;quality_flush_at_=millis()+3600000;quality_publish_at_=millis()+60000;
+  quality_->dirty=migrated;quality_flush_at_=millis()+(migrated?60000:3600000);quality_publish_at_=millis()+60000;
+  if(!quality_->replay_done && diagnostic_handle_) {
+    quality_replay_end_=diagnostic_next_;quality_replay_seq_=1;quality_replay_at_=millis();
+  }
   score_publish_();
 }
 bool HelioBridge::save_score_() {
@@ -71,7 +81,7 @@ void HelioBridge::score_activity_(const uint8_t *raw,size_t size,uint32_t start)
 }
 void HelioBridge::score_audit_(const sleep_score::Night &n,uint32_t now) {
   // Explicit little-endian layout, independent of C++ object padding.
-  uint8_t audit[108]{};
+  uint8_t audit[176]{};
   const uint32_t values[]={n.version,n.onset,n.end,n.observed,n.changed,n.first_at,n.signature,n.baseline_nights,
     n.target_minutes,n.available,n.helio_score,n.first_helio};
   for(size_t i=0;i<12;++i)protocol::write32(audit+i*4,values[i]);
@@ -80,7 +90,14 @@ void HelioBridge::score_audit_(const sleep_score::Night &n,uint32_t now) {
   for(size_t i=0;i<11;++i)memcpy(audit+48+i*4,floats+i,4);
   const uint16_t counts[]={n.asleep,n.awake,n.awakenings,n.activity_minutes,n.hr_minutes,n.local_onset};
   for(size_t i=0;i<6;++i){audit[92+i*2]=counts[i];audit[93+i*2]=counts[i]>>8;}
-  protocol::write32(audit+104,n.mature(now));diagnostic_append_(19,audit,sizeof(audit));
+  protocol::write32(audit+104,n.mature(now));
+  protocol::write32(audit+108,n.previous_version);protocol::write32(audit+112,n.previous_first_at);
+  const float extra[]={n.previous_score,n.previous_first_score,n.previous_coverage,n.components[5],n.hr_change,n.hr_trend,n.hr_sd,n.shortfall};
+  for(size_t i=0;i<8;++i)memcpy(audit+116+i*4,extra+i,4);
+  const uint16_t patterns[]={n.longest_awake,n.wake_cluster,n.late_awake,n.restless_minutes,n.movement_bursts,n.longest_movement,n.hr_pairs,n.history_nights};
+  for(size_t i=0;i<8;++i){audit[148+i*2]=patterns[i];audit[149+i*2]=patterns[i]>>8;}
+  protocol::write32(audit+164,n.patterns);protocol::write32(audit+168,n.previous_helio);protocol::write32(audit+172,n.previous_first_helio);
+  diagnostic_append_(19,audit,sizeof(audit));
 }
 void HelioBridge::score_reference_(const uint8_t *raw,size_t size,uint32_t now) {
   if(!quality_||!quality_handle_||size%sleep_data::RECORD_SIZE)return;
@@ -116,7 +133,7 @@ void HelioBridge::score_publish_() {
   if(!n) {
     personal_score_sensor_->publish_state(NAN);
     if(personal_score_coverage_sensor_)personal_score_coverage_sensor_->publish_state(0);
-    if(personal_score_status_sensor_)personal_score_status_sensor_->publish_state("Experimental v1; waiting for a completed night");
+    if(personal_score_status_sensor_)personal_score_status_sensor_->publish_state("Experimental v2; waiting for a completed night");
     return;
   }
   const uint32_t now=clock_ && clock_->utcnow().is_valid()?clock_->utcnow().timestamp:0;
@@ -127,9 +144,10 @@ void HelioBridge::score_publish_() {
     unsigned(n->version),n->mature(now)?"settled record":"provisional record",unsigned(n->baseline_nights),n->coverage,
     now && now>n->end+48*3600?"; old night":"");
   if(personal_score_status_sensor_)personal_score_status_sensor_->publish_state(message);
-  snprintf(message,sizeof(message),"Sleep %um; awake %um; wake bouts %u; overnight readings %.0f%%; duration %.0f; continuity %.0f; timing %s; HR %s; movement %s",
-    unsigned(n->asleep),unsigned(n->awake),unsigned(n->awakenings),n->activity_coverage*100,
-    n->components[0],n->components[1],n->available&4?"available":"pending",n->available&8?"available":"pending",n->available&16?"available":"pending");
+  snprintf(message,sizeof(message),"Sleep %um; awake %um; longest wake %um; wake cluster %u; readings %.0f%%; HR %s; movement %s; timing %s; recent nights %u%s",
+    unsigned(n->asleep),unsigned(n->awake),unsigned(n->longest_awake),unsigned(n->wake_cluster),n->activity_coverage*100,
+    n->available&8?"active":"pending",n->available&16?"active":"pending",n->available&4?"active":"pending",
+    unsigned(n->history_nights),n->available&32?"":" (pending)");
   if(personal_score_details_sensor_)personal_score_details_sensor_->publish_state(message);
 }
 void HelioBridge::score_tick_() {
@@ -138,6 +156,35 @@ void HelioBridge::score_tick_() {
   if(int32_t(ms-quality_publish_at_)>=0){quality_publish_at_=ms+60000;score_publish_();}
   // Flash work stays outside the alarm window and worn follow-up period.
   if((smart_enabled_ && !smart_session_.finished && smart_wake::light_window(smart_session_,now)) || follow_monitoring_(now))return;
+  if(quality_replay_seq_){score_replay_();return;}
   if(quality_->dirty && int32_t(ms-quality_flush_at_)>=0)save_score_();
+}
+void HelioBridge::score_replay_() {
+  // Reuse already committed minute observations; one bounded batch per idle slice.
+  const uint32_t ms=millis();if(int32_t(ms-quality_replay_at_)<0)return;quality_replay_at_=ms+100;
+  uint32_t seq=quality_replay_end_;
+  for(uint32_t value:diagnostic_sequences_)if(value>=quality_replay_seq_ && value<seq)seq=value;
+  if(seq>=quality_replay_end_) {
+    quality_replay_seq_=0;quality_->replay_done=1;quality_->dirty=true;
+    quality_flush_at_=ms+60000;quality_urgent_=true;
+    diagnostic_text_(8,"Personal score v2: finished recovery of recent committed overnight minute readings");return;
+  }
+  quality_replay_seq_=seq+1;const size_t slot=seq%DIAGNOSTIC_SLOTS;
+  char key[12];snprintf(key,sizeof(key),"b%03u",unsigned(slot));size_t size=0;
+  if(nvs_get_blob(diagnostic_handle_,key,nullptr,&size)!=ESP_OK || size<16 || size>49168)return;
+  std::vector<uint8_t> blob(size),raw;
+  if(nvs_get_blob(diagnostic_handle_,key,blob.data(),&size)!=ESP_OK || memcmp(blob.data(),"HLG2",4) ||
+      protocol::read32(blob.data()+4)!=seq || protocol::read32(blob.data()+8)>24576 ||
+      !diagnostic::decode(blob.data()+16,size-16,protocol::read32(blob.data()+8),raw) ||
+      diagnostic::crc(raw.data(),raw.size())!=protocol::read32(blob.data()+12))return;
+  const uint32_t now=clock_->utcnow().timestamp;
+  for(size_t at=0;at+11<=raw.size();) {
+    const auto *event=raw.data()+at;const uint32_t stamp=protocol::read32(event+1);const unsigned len=protocol::read16(event+9);
+    at+=11;if(len>raw.size()-at)return;const auto *p=raw.data()+at;
+    if(event[0]==9 && stamp>=1577836800U && stamp<=now && uint64_t(stamp)+2*86400>=now &&
+        len>=17 && len<=977 && p[0]==1 && (len-17)%8==0)
+      quality_->activity(p+17,len-17,protocol::read32(p+5),now);
+    at+=len;
+  }
 }
 } // namespace esphome::helio_bridge

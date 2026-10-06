@@ -1,115 +1,172 @@
-# Personal sleep score v1
+# Personal sleep score v2
 
-The aim is a personal 0–100 estimate of overnight sleep quality, using only the time the strap is worn for sleep.
+The aim is a personal 0–100 estimate of overnight sleep quality using only the time the strap is worn for sleep.
 
-This first version is an **experimental, transparent index**, rather than a validated predictor of felt sleep quality.
+This is an **experimental, transparent index**, not a validated predictor of felt sleep quality.
 
 No daily ratings, daytime activity, morning-performance targets or always-on computer are required.
 
-The ESP32 stores each night's first estimate, later revisions and matching Helio scores for comparison.
+The ESP32 stores first estimates, subsequent corrections and matching Helio scores, with model versions kept distinct.
 
-## What adapts
+## What changed from v1
 
-Personal reference values update from up to 28 days of previously completed, settled nights.
+Continuity now distinguishes one long awakening from brief awakenings with the same total awake time, and measures clustering within 30 minutes.
 
-At least seven eligible prior nights are required for each personalized component.
+Heart rate includes adjacent-minute fluctuations and the change from the first to the last third of the night.
 
-The current night is excluded from its own baseline, and future nights never affect its first estimate.
+Movement includes how often activity occurs, how long consecutive bursts last and how many bursts occur, alongside average intensity.
 
-A record is eligible only after its end is at least 12 hours old, a fresh strap read has occurred after that point, and its sleep/awake duration has been unchanged for at least an hour.
+Recent short nights add a small context component; the current night does not enter its own historical baseline.
 
-“Settled” describes this freshness/stability rule; it does not mean Zepp can no longer revise a record.
+The firmware preserves v1 historical scores and original first estimates during storage migration.
 
-**Adaptation learns typical timing and physiology, not which nights actually felt good.**
-
-There is no automatic weight fitting, Helio-score matching, supervised quality-label learning or claim that accuracy improves merely with time.
+A v2 first estimate starts a separate comparison, and its audit retains the preceding v1 score, coverage, first estimate, date and Helio comparison values.
 
 ## Inputs and formula
 
-The score accepts a completed night with a continuous valid sleep/awake timeline and a duration of 2–16 hours.
+A new score requires a completed main night with a continuous valid sleep/awake timeline and a duration of 2–16 hours.
 
-A gap, invalid record, open end or nap-only record cannot yield a new quality score.
+Gaps, open ends, invalid records and nap-only records cannot yield a new quality score.
 
-Every non-Awake stage counts equally as asleep; Light/Deep/REM proportions and the separate learned alarm-stage classifier are not score inputs.
+Every non-Awake stage counts equally as asleep; Deep/REM percentages, Helio's score and the learned alarm-stage classifier are not inputs or training targets.
 
 | Component | Weight | Calculation |
 | --- | ---: | --- |
-| Duration | 40 | `100 × min(asleep minutes / chosen target minutes, 1)` |
-| Continuity | 30 | 75% sleep fraction within the recorded night + 25% fragmentation component |
-| Timing | 10 | Circular distance from the average prior local sleep onset; first 30 minutes tolerated, then one point lost per six minutes |
-| Overnight HR | 10 | Penalize elevations above the prior median, using robust variability with a 2 bpm minimum scale |
-| Overnight movement | 10 | Penalize elevations in `log(1 + mean movement)` above prior nights, using robust variability with a 0.15 minimum scale |
+| Duration | 30 | `100 × min(asleep minutes / chosen target minutes, 1)` |
+| Continuity | 30 | 55% sleep fraction + 20% longest-awakening score + 15% awakening-frequency score + 10% clustering score |
+| Timing | 10 | Circular deviation from average prior local onset; 30 minutes tolerated, then one point lost per six minutes |
+| HR patterns | 15 | 40% HR-level score + 40% adjacent-minute-change score + 20% late-minus-early trend score, each compared with prior nights |
+| Movement patterns | 10 | 30% average-intensity score + 30% active-minute-fraction score + 20% longest-burst score + 20% burst-frequency score, each compared with prior nights |
+| Recent shortfall | 5 | `100 − 75 × average relative duration shortfall` across 3–7 eligible previous nights within eight days |
 
-Fragmentation starts at 100 and loses five points per awakening bout above three bouts per equivalent eight hours, clamped to 0–100.
+Missing components are omitted, and available weights are normalized to calculate the score.
 
-Adjacent Awake segments form one bout.
+With duration and continuity alone, component coverage is **60%** and their relative contributions are 50%/50%.
 
-The robust scale is `max(minimum scale, 1.4826 × median absolute deviation)`.
+Coverage describes the available planned weights, not accuracy or the percentage of minute readings received.
 
-HR and movement each lose 15 points per positive robust standard deviation above the median, clamped to 0–100.
+The separate overnight-reading percentage is reported in details and audits.
 
-The duration target is the saved 6–10 hour sleep-target control, default 8.5 hours, frozen when that dated night's first score is recorded.
+The sleep target is the saved 6–10 hour control, default 8.5 hours, frozen when that dated night's first estimate is recorded and retained on upgrade.
 
-Only minute records **inside the recorded night** contribute HR and movement.
+### Interruption detail
 
-Removed/charging/unknown-wear samples and invalid HR are excluded, and overlapping reads cannot multiply observations or revise the first-arrival minute values.
+The longest-awakening score starts at 100, tolerates five minutes, then loses three points per additional minute.
 
-HR requires at least 70% covered worn minutes, at least 120 valid HR minutes and at least half the night with HR; movement requires at least 70% covered worn minutes.
+The frequency score starts at 100 and loses five points per awakening above three bouts per equivalent eight hours.
 
-Each physiological baseline also requires seven prior nights meeting its coverage requirements.
+The clustering score starts at 100 and loses 15 points per bout above two beginning in any rolling 30-minute interval.
 
-There are no beat-to-beat intervals or raw PPG waveforms available here; minute-HR variability is not HRV.
+All component scores are clamped to 0–100.
 
-All weights, tolerances, coverage cutoffs and stability rules above are **engineering heuristics**, not parameters established by a clinical validation study.
+Adjacent Awake segments form one awakening; splitting a segment cannot reset stability or increase the count.
 
-## Missing data and comparison
+Awake minutes in the last third are logged for review, without an extra penalty for natural morning wakefulness.
 
-Unavailable components are omitted and the remaining weights are normalized.
+### Overnight patterns
 
-The initial duration/continuity score has **70% component coverage**, which is explicitly exposed alongside the score.
+Only minute samples inside the recorded night contribute HR and movement.
 
-Component coverage is the fraction of planned weights available, not a probability of accuracy or the fraction of overnight samples received.
+Removed/charging/unknown-wear samples and invalid HR are excluded; overlapping polls cannot multiply observations or change first-arrival minute values.
 
-The separate overnight-reading percentage appears in score details and audits.
+A missing minute breaks adjacent-HR comparisons and movement runs, rather than silently joining observations across a gap.
 
-Compare nights with matching model versions, component coverage and record maturity; a full score and a partial score do not have identical meanings.
+The HR pattern requires at least 70% recorded worn minutes, 120 valid HR minutes, adjacent pairs covering at least half the night, and at least 60% coverage plus 30 HR observations in both the first and last thirds.
 
-A high number from our score, or agreement with Helio, is not evidence that our score is better.
+Movement requires at least 70% recorded worn minutes.
 
-The score has an independent formula and objective, but still shares the strap's sensors and sleep/awake measurements with Helio.
+A movement burst is a consecutive run of positive strap-reported activity intensity, with frequency normalized to eight hours.
 
-Quiet wakefulness, provisional strap records and missed readings can therefore affect both.
+These are activity proxies; ordinary turns, device noise and normal sleep-stage changes can affect them.
 
-Without an independent outcome or reference measurement, we can examine stability, completeness and response to interruptions, but cannot establish superior sleep-quality accuracy.
+Adjacent-minute HR change is the mean absolute difference between valid consecutive minute HR readings.
 
-This limitation is consistent with the need for external validation emphasized in the [AASM position statement on consumer sleep technology](https://aasm.org/advocacy/position-statements/consumer-sleep-technology/).
+Trend is mean HR in the final third minus mean HR in the initial third.
 
-## Runtime and audit
+Minute-HR standard deviation is also logged for inspection, but is not scored separately.
 
-Home Assistant receives **Helio Personal Sleep Score**, **Helio Personal Score Component Coverage**, **Helio Personal Score Status** and **Helio Personal Score Details**.
+None of these quantities is beat-to-beat HRV; raw PPG and beat intervals are unavailable here.
 
-The screen keeps Helio's score at its original large size and adds our score in smaller parentheses on the same line, for example `78 (96)`.
+### Personalized comparison
 
-Only the parenthesized font shrinks for wider values such as `100 (100)`, and an unavailable or differently dated personal score shows `(--)`.
+Timing and each physiological comparison use at least seven eligible prior nights from the last 28 days.
 
-The smart-wake alarm logic is unchanged.
+Duplicate onset revisions do not count as additional nights, and another record from the current local night cannot become its own baseline.
 
-The model runs on the ESP32, retains 90 dated nightly summaries and keeps a three-day bounded minute cache; no computer is needed overnight.
+Local night dates use the 18:00 boundary and the stored local onset, including the Lisbon clock offset.
 
-Completed aggregate measurements survive minute-cache retirement.
+A prior record is eligible only after its end is at least 12 hours old, a fresh read has occurred after that point, and its relevant sleep/awake timeline has been unchanged for an hour.
 
-A separate versioned, size-checked, CRC-protected NVS blob stores the complete model and cache, usually hourly or one minute after a new/revised score, only outside BLE operations, queued alarms, the early wake window and worn follow-ups.
+“Settled” describes this rule; it does not mean Zepp cannot revise the record again.
 
-A sudden power failure can lose uncommitted samples since the last save; a corrupt image resets only this module.
+For each physiological feature, elevations above the prior median lose 15 points per positive robust standard deviation.
 
-The first estimates are retained per stored onset; later estimates may change after corrected sleep records, newly received activity or newly eligible prior baselines.
+The robust scale is `max(floor, 1.4826 × median absolute deviation)`.
 
-A change to onset identifies a separate dated record rather than silently moving its original first estimate.
+The floors are 2 bpm for mean HR, 1 bpm for mean adjacent-minute change, 3 bpm for trend, 0.15 for `log(1 + mean activity intensity)`, 0.02 for active-minute fraction, 0.25 for `log(1 + longest movement burst)` and 0.5 for bursts per eight hours.
 
-Versioned event kind 19 records the first/latest scores, both Helio comparison scores, inputs, component scores, coverage, version, target and stability state when a result materially changes.
+Normal HR or movement variability is not automatically a defect; the index reacts to elevations relative to the person's recorded pattern.
 
-The existing bounded onboard journal can eventually evict older raw/audit events, while the 90-night summary history remains separately stored.
+Each prior physiological night must pass the same relevant coverage rules as the current night.
 
-Manual review can download the logs and run `python3 diagnostics/sleep_score_report.py PATH/TO/events.jsonl`.
+The recent-shortfall component uses each prior night's own frozen target; missing nights are excluded and extra sleep is not treated as proof that previous shortfall was repaid.
 
-The report compares recorded results only and does not fit our score to Helio.
+This is a small historical context adjustment, not a measured physiological sleep debt.
+
+## Interpretation
+
+All weights, thresholds, floors and stability rules above are **engineering heuristics**; they have not been established by a clinical validation study.
+
+Adaptation learns usual timing and physiology, not which nights actually felt good.
+
+A stable personal baseline can also represent an unhealthy pattern, so being typical is not proof of good sleep.
+
+There is no automatic weight fitting, Helio-score matching or supervised quality-label learning.
+
+Higher numbers or agreement with Helio do not establish greater accuracy.
+
+Compare matching versions, component coverage and maturity; partial and full scores do not contain identical information.
+
+Our formula is independent, but the sensors and sleep/awake measurements still come from the same strap as Helio.
+
+Quiet wakefulness and incorrect strap timelines can therefore affect both scores.
+
+Without an independent outcome or reference measurement, completeness, stability and sensitivity can be tested, but superior sleep-quality accuracy remains unproven.
+
+The need for external validation is emphasized by the [AASM position statement](https://aasm.org/advocacy/position-statements/consumer-sleep-technology/).
+
+The general relevance of regular timing and repeated short nights is described by [NHLBI sleep habits](https://www.nhlbi.nih.gov/health/sleep-deprivation/healthy-sleep-habits) and [sleep-deficiency effects](https://www.nhlbi.nih.gov/health/sleep-deprivation/health-effects), but these sources do not validate this formula or its weights.
+
+## Runtime, storage and display
+
+Home Assistant exposes **Helio Personal Sleep Score**, **Helio Personal Score Component Coverage**, **Helio Personal Score Status** and **Helio Personal Score Details**.
+
+The screen keeps Helio's number at its original size and adds our score in smaller parentheses, for example `78 (96)`.
+
+Only the parenthesized font shrinks for wide values such as `100 (100)`; missing or differently dated personal results show `(--)`.
+
+Alarm scheduling and the stage-learning controller are unchanged.
+
+The model runs on the ESP32, retaining 90 dated summaries and a three-day bounded minute cache.
+
+Completed pattern aggregates survive minute-cache retirement.
+
+At the first v2 start, the ESP32 recovers available recent minute records from CRC-validated committed onboard logs, one batch per idle slice, without requiring a computer or altering the strap's data.
+
+Older journal batches may already have rotated away; missing data cannot be reconstructed.
+
+The next fresh sleep read recomputes the applicable nightly score from recovered measurements.
+
+Recovery pauses for BLE operations, queued alarms, the early wake window and worn follow-ups.
+
+The separate score blob is versioned, size-checked and CRC-protected, and migrates the v1 layout while preserving historical comparisons.
+
+It is saved hourly or after a new/revised result, outside the same priority-sensitive periods, retaining storage space for alarms and settings.
+
+A sudden power failure can lose uncommitted observations; a corrupt score image resets only this module.
+
+Audit event kind 19 accepts the older 108-byte v1 format and a 176-byte v2 format containing all new patterns, historical context and prior-version comparison fields.
+
+The onboard journal remains bounded and may evict older audits, while nightly summaries remain in the separate 90-slot history.
+
+Manual review uses `python3 diagnostics/sleep_score_report.py PATH/TO/events.jsonl` after downloading logs; no computer is needed overnight.

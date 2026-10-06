@@ -12,6 +12,8 @@ namespace helio_bridge {
 struct HelioBridge {
  enum class Phase {IDLE,BUSY};Phase phase_=Phase::IDLE;bool queued_alarm_=false,smart_enabled_=false,following=false;
  static constexpr size_t DIAGNOSTIC_SLOTS=384;
+ std::array<uint32_t,DIAGNOSTIC_SLOTS> diagnostic_sequences_{};
+ unsigned diagnostic_handle_=0;uint32_t diagnostic_next_=1;
  Clock clock;Clock *clock_=&clock;smart_wake::Session smart_session_{};
  int evictions{},audit_records{};std::vector<uint8_t> audit;
  void diagnostic_text_(int,const char*){}
@@ -45,8 +47,8 @@ int main(){
  b.set_score_target(9);assert(b.quality_->target_minutes==540);b.set_score_target(NAN);b.set_score_target(0);assert(b.quality_->target_minutes==540);
  auto r=night();u16(r,0x24c,480);uint32_t lo=onset(r),end=lo+480*60;b.clock.now=end+3600;
  activity(*b.quality_,lo,480);b.score_reference_(r.data(),r.size(),b.clock.now);
- assert(std::isfinite(score.value) && coverage.value==70 && b.audit_records==1 && b.audit.size()==108);
- assert(protocol::read32(b.audit.data())==1 && protocol::read32(b.audit.data()+4)==lo);
+ assert(std::isfinite(score.value) && coverage.value==60 && b.audit_records==1 && b.audit.size()==176);
+ assert(protocol::read32(b.audit.data())==2 && protocol::read32(b.audit.data()+4)==lo);
  assert(b.quality_->latest()->local_onset==ESPTime::from_epoch_local(lo).hour*60+ESPTime::from_epoch_local(lo).minute);
  assert(std::isnan(b.displayed_personal_score()));
  auto receive=[&](const Record &row){
@@ -77,6 +79,35 @@ int main(){
  no_ram.setup_score_();assert(!no_ram.quality_ && status.value.find("insufficient memory")!=std::string::npos);no_memory=false;
  fail_open=true;HelioBridge no_store;no_store.personal_score_sensor_=&score;no_store.setup_score_();assert(!no_store.quality_handle_);fail_open=false;
  HelioBridge optional;optional.setup_score_();assert(!optional.quality_);
+
+ // Upgrade the real persisted v1 layout without losing historical first scores.
+ sleep_score_v1::Model old;auto &n=old.nights[0];n.onset=lo;n.end=end;n.asleep=480;n.observed=end+3600;
+ n.changed=end+600;n.first_at=end+600;n.local_onset=1320;n.ours=75;n.first_score=74;n.coverage=70;n.available=3;
+ std::vector<uint8_t> v1(sizeof(old)+16);protocol::write32(v1.data(),SCORE_MAGIC);protocol::write32(v1.data()+4,1);
+ protocol::write32(v1.data()+8,sizeof(old));memcpy(v1.data()+16,&old,sizeof(old));protocol::write32(v1.data()+12,protocol::crc32(v1.data()+16,sizeof(old)));
+ flash[b.quality_handle_]["database"]=v1;
+ HelioBridge migration;migration.personal_score_sensor_=&score;migration.clock.now=end+7200;migration.setup_score_();
+ assert(migration.quality_->latest()->version==1 && migration.quality_->latest()->first_score==74 && migration.quality_->dirty);
+ migration.score_reference_(r.data(),r.size(),migration.clock.now);assert(migration.quality_->latest()->version==2);
+ assert(migration.quality_->latest()->previous_score==75 && migration.quality_->latest()->previous_first_score==74);
+ // Bounded read-only recovery reuses CRC-validated committed minute rows while idle.
+ std::vector<uint8_t> payload(17+8*30);payload[0]=1;protocol::write32(payload.data()+5,lo);
+ for(size_t i=0;i<30;++i){payload[17+i*8]=120;payload[18+i*8]=2;payload[20+i*8]=60;}
+ std::vector<uint8_t> event(11+payload.size());event[0]=9;protocol::write32(event.data()+1,end);
+ event[9]=payload.size();event[10]=payload.size()>>8;memcpy(event.data()+11,payload.data(),payload.size());
+ auto packed=diagnostic::encode(event.data(),event.size());std::vector<uint8_t> blob(16+packed.size());
+ memcpy(blob.data(),"HLG2",4);protocol::write32(blob.data()+4,1);protocol::write32(blob.data()+8,event.size());
+ protocol::write32(blob.data()+12,diagnostic::crc(event.data(),event.size()));memcpy(blob.data()+16,packed.data(),packed.size());
+ flash[99]["b001"]=blob;
+ HelioBridge recover;recover.personal_score_sensor_=&score;recover.clock.now=end+7200;recover.diagnostic_handle_=99;
+ recover.diagnostic_next_=2;recover.diagnostic_sequences_[1]=1;recover.setup_score_();assert(recover.quality_replay_seq_==1);
+ recover.phase_=HelioBridge::Phase::BUSY;recover.score_tick_();assert(!recover.quality_->minute(lo));
+ recover.phase_=HelioBridge::Phase::IDLE;recover.score_tick_();assert(recover.quality_->minute(lo)->hr==60);
+ fake_ms+=101;recover.score_tick_();assert(recover.quality_replay_seq_==0 && recover.quality_->replay_done==1);
+ // Malformed committed blobs cannot be accepted as recovered physiological data.
+ flash[99]["b001"].back()^=1;
+ HelioBridge reject;reject.personal_score_sensor_=&score;reject.clock.now=end+7200;reject.diagnostic_handle_=99;
+ reject.diagnostic_next_=2;reject.diagnostic_sequences_[1]=1;reject.setup_score_();reject.score_tick_();assert(!reject.quality_->minute(lo));
  std::cout<<"Personal score controller: optional config, local time, API, audits, flash/reboot/CRC, failures and alarm priority passed\n";
 }
 ''')
@@ -108,3 +139,16 @@ summary=summarize([item,item])
 assert len(summary['nights'])==1 and summary['nights'][0]['overnight_reading_percent']==95
 assert 'does not establish' in summary['interpretation']
 print('Personal score audit decoder: version, comparison, first estimate, components and corruption passed')
+
+# v2 keeps the v1-compatible prefix and adds pattern/history and prior-version evidence.
+values2=(2,)+values[1:]
+extra=struct.pack('<2I8f8H3I',1,1700030000,75.,74.,70.,90.,2.5,-3.,4.,.1,10,3,2,50,7,6,400,3,7,78,76)
+payload2=struct.pack('<12I11f6HI',*values2,*floats,480,0,0,456,456,1320,1)+extra
+raw=struct.pack('<BIIH',19,1700030000,90000,len(payload2))+payload2
+packed=bytearray()
+for v in raw: packed.extend(bytes((v,)) if v else b'\0\1')
+item2=decode_blob(struct.pack('<4sIII',b'HLG2',1,len(raw),zlib.crc32(raw))+packed,1)[0]
+assert item2['score']['version']==2 and item2['score']['previous_first_score']==74
+assert item2['score']['hr_late_minus_early']==-3 and item2['score']['longest_movement_burst']==6
+assert len(summarize([item,item2])['nights'])==2
+print('v1 migration, v2 audit, history/pattern reporting and idle log recovery passed')
