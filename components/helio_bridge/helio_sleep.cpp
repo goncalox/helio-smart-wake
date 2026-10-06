@@ -91,6 +91,11 @@ void HelioBridge::finish_sleep_() {
   diagnostic_sleep_.clear();
   publish_timestamp_(sleep_sync_sensor_, now);
   sleep_records_sensor_->publish_state(sleep_transfer_.records());
+  if (night_duration_sensor_ != nullptr) {
+    const auto &night = sleep_transfer_.latest_night();
+    night_duration_sensor_->publish_state(!night.valid ? NAN : night.sleep_minutes ? night.sleep_minutes :
+                                         night.accounting_complete ? night.timeline_sleep_minutes : NAN);
+  }
   if (sleep_score_sensor_ != nullptr) {
     const auto &score = sleep_transfer_.night_score();
     sleep_score_sensor_->publish_state(score.valid ? score.value : NAN);

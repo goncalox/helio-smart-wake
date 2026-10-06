@@ -154,6 +154,16 @@ class Transfer {
         if (decode(record_.data(), record_.size(), now_, candidate)) {
           usable_++;
           if (!latest_.valid || std::max(candidate.through, candidate.end) >= std::max(latest_.through, latest_.end)) latest_ = candidate;
+          // Keep the nightly duration separate from the newest night-or-nap stage.
+          auto night_record = record_;
+          night_record[0x17] = 0;  // Ignore nap summaries in this already-validated record.
+          night_record[0x55] = 0;  // Ignore the daytime timeline.
+          Snapshot night;
+          if (record_[0x54] && decode(night_record.data(), night_record.size(), now_, night) && night.onset &&
+              (!latest_night_.valid || night.onset > latest_night_.onset ||
+               (night.onset == latest_night_.onset && std::max(night.through, night.end) >=
+                                                       std::max(latest_night_.through, latest_night_.end))))
+            latest_night_ = night;
         } else rejected_++;
         const auto score = decode_night_score(record_.data(), record_.size(), now_);
         if (score.valid && (!night_score_.valid || score.onset > night_score_.onset ||
@@ -168,11 +178,13 @@ class Transfer {
   unsigned usable() const { return usable_; }
   unsigned rejected() const { return rejected_; }
   const Snapshot &latest() const { return latest_; }
+  const Snapshot &latest_night() const { return latest_night_; }
   const NightScore &night_score() const { return night_score_; }
  private:
   std::array<uint8_t, RECORD_SIZE> record_{};
   NightScore night_score_{};
   Snapshot latest_{};
+  Snapshot latest_night_{};
   uint32_t expected_{}, received_{}, now_{}, crc_{0xffffffffU};
   unsigned usable_{}, rejected_{};
   uint8_t counter_{};

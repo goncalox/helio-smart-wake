@@ -82,15 +82,21 @@ Changing the time selector alone does not write an alarm; press **Set Helio Alar
 and wait for **Saved and verified**.
 **Cancel Helio Alarm** cancels only the bridge-owned alarm after checking ownership.
 
-The dimmed, always-visible portrait display shows three large values with short
-labels: **BAT** for strap battery percentage, **READ** for actual read health,
-and **SLEEP** for the strap's latest nightly sleep score (0–100).
-It stays upright at 10% brightness, with no signal-strength readings or detailed status text.
-Unknown battery/score readings show dashes and stale readings fade grey.
-READ shows **OK** (green) only after successful validated sleep and activity transfers,
-**READ** (blue) while fetching, **FAIL** (red) after a failed transfer,
-**WAIT** (amber) before first success or when reads become overdue, and **OFF**
-(grey) when sleep monitoring is disabled.
+The dimmed, always-visible portrait display uses a full-width read-health banner
+and three vertically stacked values separated by thin lines: **BATTERY** (%),
+**SLEEP SCORE** (0–100) and **TOTAL SLEEP** (hours:minutes asleep, excluding awake time).
+All labels are uppercase, with a bold font, consistent spacing and separate smaller percent sign.
+The layout uses the complete 135×240 screen at rotation 180° and 10% brightness.
+There are no signal readings or extra headings.
+Unknown values show dashes; values whose last receipt is over 15 minutes old fade grey.
+The nightly duration is selected separately from the most recent night-or-nap stage,
+so a newer nap cannot replace it; it uses the strap's nightly summary, falling back
+to complete night-stage accounting for an ongoing night.
+It is also exposed as `Helio Night Sleep Duration` in Home Assistant (minutes).
+The health banner shows **READ OK** (green) only after successful validated sleep and
+activity transfers, **READING** (blue) while fetching, **READ FAIL** (red) after a failed
+transfer, **WAITING** (amber) before first success or when reads become overdue,
+and **READ OFF** (grey) when sleep monitoring is disabled.
 The same status is exposed as `Helio Read Status` in Home Assistant.
 Freshness uses transfer receipt time, not the age of the last sleep stage;
 a strap that returns no new records can still have healthy communication.

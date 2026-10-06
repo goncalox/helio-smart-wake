@@ -104,6 +104,8 @@ int main() {
   assert(transfer.records() == 2 && transfer.usable() == 2 && transfer.latest().stage == 5);
   assert(transfer.latest().onset == base + 2000 * 60);
   assert(transfer.night_score().valid && transfer.night_score().value == 78);
+  assert(transfer.latest_night().valid && !transfer.latest_night().is_nap);
+  assert(transfer.latest_night().onset == base + 1320 * 60 && transfer.latest_night().sleep_minutes == 480);
   // A newer nap-only row or a later-arriving older night cannot replace the newest night score.
   auto older = r; protocol::write32(older.data()+4, midnight-86400); older[0x16] = 94;
   raw.assign(nap.begin(), nap.end()); raw.insert(raw.end(), older.begin(), older.end());
@@ -115,7 +117,33 @@ int main() {
   assert(transfer.complete(true,protocol::crc32(raw.data(),raw.size())));
   assert(transfer.night_score().valid && transfer.night_score().value==78);
   assert(transfer.night_score().onset==base+1320*60);
+  assert(transfer.latest_night().onset==base+1320*60 && transfer.latest_night().sleep_minutes==480);
   assert(transfer.start(0, now) && !transfer.night_score().valid);
+  assert(!transfer.latest_night().valid);
+  auto receive_night = [&](const Record &record) {
+    Transfer result;
+    assert(result.start(record.size(), now));
+    for (unsigned i=0; i<record.size(); ++i) {
+      uint8_t packet[]{uint8_t(i),record[i]}; assert(result.feed(packet,sizeof(packet)));
+    }
+    assert(result.complete(true,protocol::crc32(record.data(),record.size())));
+    return result.latest_night();
+  };
+  // Ongoing nights use complete stage accounting until the strap supplies a summary.
+  const auto live_night = receive_night(ongoing);
+  assert(live_night.valid && live_night.sleep_minutes==0 && live_night.accounting_complete);
+  assert(live_night.timeline_sleep_minutes==480);
+  // Awake time is excluded from both the final summary and live stage fallback.
+  auto awake_summary = awake; u16(awake_summary,0x24c,210);
+  const auto measured_night = receive_night(awake_summary);
+  assert(measured_night.sleep_minutes==450 && measured_night.awake_minutes==30);
+  assert(measured_night.timeline_sleep_minutes==450);
+  u16(awake_summary,12,65535);
+  u16(awake_summary,0x24a,0); u16(awake_summary,0x24c,0); u16(awake_summary,0x24e,0);
+  const auto awake_live = receive_night(awake_summary);
+  assert(awake_live.sleep_minutes==0 && awake_live.accounting_complete && awake_live.timeline_sleep_minutes==450);
+  assert(!receive_night(nap_only).valid);
+  assert(receive_night(invalid_score).sleep_minutes==480); // Missing score does not hide valid duration.
   assert(transfer.start(RECORD_SIZE, now));
   uint8_t first[]{0, r[0]}, skipped[]{2, r[1]};
   assert(transfer.feed(first, sizeof(first)));

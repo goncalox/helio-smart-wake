@@ -50,6 +50,13 @@ helio_bridge:
     name: Helio Sleep Data Age
   sleep_duration:
     name: Helio Recorded Sleep Duration
+  night_duration:
+    id: helio_night_sleep_duration
+    name: Helio Night Sleep Duration
+    on_value:
+      then:
+        - lambda: |-
+            if (std::isfinite(x)) id(helio_duration_seen) = millis();
   sleep_records:
     name: Helio Sleep Records Read
   sleep_score:
@@ -276,6 +283,10 @@ esphome:
           brightness: 10%
 
 globals:
+  - id: helio_duration_seen
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
   - id: helio_score_seen
     type: uint32_t
     restore_value: false
@@ -286,18 +297,31 @@ globals:
     initial_value: '0'
 
 font:
-  - file: "gfonts://Roboto"
+  - file: "gfonts://Arimo@700"
     id: helio_screen_label
-    size: 16
-    glyphs: "BAT REDSLP"
-  - file: "gfonts://Roboto"
+    size: 17
+    bpp: 4
+    glyphs: " ABCELOPRSTY"
+  - file: "gfonts://Arimo@700"
     id: helio_screen_value
-    size: 48
-    glyphs: "0123456789% -"
-  - file: "gfonts://Roboto"
+    size: 54
+    bpp: 4
+    glyphs: "0123456789:-"
+  - file: "gfonts://Arimo@700"
+    id: helio_screen_duration_wide
+    size: 46
+    bpp: 4
+    glyphs: "0123456789:-"
+  - file: "gfonts://Arimo@700"
+    id: helio_screen_unit
+    size: 21
+    bpp: 4
+    glyphs: "%"
+  - file: "gfonts://Arimo@700"
     id: helio_screen_status
-    size: 40
-    glyphs: "WAIT REDOKFL"
+    size: 18
+    bpp: 4
+    glyphs: " ADEFGIKLNORTW"
 
 display:
   - platform: mipi_spi
@@ -307,24 +331,50 @@ display:
     color_depth: 16
     update_interval: 5s
     lambda: |-
-      const Color grey(140, 150, 162), white(230, 235, 240);
-      const bool known = id(helio_strap_battery).has_state() && std::isfinite(id(helio_strap_battery).state);
-      const float battery = known ? id(helio_strap_battery).state : 0;
-      const uint32_t age = known ? (millis() - id(helio_battery_seen)) / 60000 : 0;
-      const Color accent = !known || age >= 15 ? grey : battery <= 10 ? Color(245, 85, 75) :
-          battery <= 20 ? Color(240, 180, 70) : Color(100, 210, 170);
-      it.print(67, 2, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "BAT");
-      if (known) it.printf(67, 22, id(helio_screen_value), accent, TextAlign::TOP_CENTER, "%.0f%%", battery);
-      else it.print(67, 22, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--%");
-      it.print(67, 82, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "READ");
-      const auto read = id(helio).read_indicator(millis());
-      const Color read_color = read == 2 ? Color(100, 210, 170) : read == 1 ? Color(100, 165, 235) :
-          read == 0 ? Color(240, 180, 70) : read == 3 ? Color(245, 85, 75) : grey;
-      it.print(67, 106, id(helio_screen_status), read_color, TextAlign::TOP_CENTER,
-               id(helio).read_label(millis()));
-      it.print(67, 162, id(helio_screen_label), grey, TextAlign::TOP_CENTER, "SLEEP");
+      const uint32_t now = millis();
+      const Color grey(170, 175, 182), white(245, 245, 245), black(0, 0, 0), divider(65, 69, 75);
+      const auto read = id(helio).read_indicator(now);
+      const Color read_color = read == 2 ? Color(93, 207, 154) : read == 1 ? Color(102, 173, 235) :
+          read == 0 ? Color(234, 180, 79) : read == 3 ? Color(245, 104, 92) : grey;
+      const char *read_text = read == 2 ? "READ OK" : read == 1 ? "READING" :
+          read == 3 ? "READ FAIL" : read == 4 ? "READ OFF" : "WAITING";
+      it.filled_rectangle(0, 0, 135, 24, read_color);
+      it.print(67, 18, id(helio_screen_status), black, TextAlign::BASELINE_CENTER, read_text);
+
+      it.print(67, 44, id(helio_screen_label), grey, TextAlign::BASELINE_CENTER, "BATTERY");
+      const bool battery_known = id(helio_strap_battery).has_state() && std::isfinite(id(helio_strap_battery).state);
+      const float battery = battery_known ? id(helio_strap_battery).state : 0;
+      const bool battery_fresh = battery_known && uint32_t(now - id(helio_battery_seen)) < 900000U;
+      const Color battery_color = !battery_fresh ? grey : battery <= 10 ? Color(245, 85, 75) :
+          battery <= 20 ? Color(240, 180, 70) : white;
+      char battery_text[8];
+      if (battery_known) snprintf(battery_text, sizeof(battery_text), "%.0f", battery);
+      else snprintf(battery_text, sizeof(battery_text), "--");
+      int number_width, unit_width, x_offset, baseline, height;
+      id(helio_screen_value).measure(battery_text, &number_width, &x_offset, &baseline, &height);
+      id(helio_screen_unit).measure("%", &unit_width, &x_offset, &baseline, &height);
+      const int battery_left = (135 - number_width - 3 - unit_width) / 2;
+      it.print(battery_left, 91, id(helio_screen_value), battery_color, TextAlign::BASELINE_LEFT, battery_text);
+      it.print(battery_left + number_width + 3, 91, id(helio_screen_unit), grey, TextAlign::BASELINE_LEFT, "%");
+
+      it.line(7, 96, 127, 96, divider);
+      it.print(67, 116, id(helio_screen_label), grey, TextAlign::BASELINE_CENTER, "SLEEP SCORE");
       const bool score_known = id(helio_sleep_score).has_state() && std::isfinite(id(helio_sleep_score).state);
-      const bool score_fresh = score_known && uint32_t(millis() - id(helio_score_seen)) < 900000U;
-      if (score_known) it.printf(67, 182, id(helio_screen_value), score_fresh ? white : grey,
-                                 TextAlign::TOP_CENTER, "%.0f", id(helio_sleep_score).state);
-      else it.print(67, 182, id(helio_screen_value), grey, TextAlign::TOP_CENTER, "--");
+      const bool score_fresh = score_known && uint32_t(now - id(helio_score_seen)) < 900000U;
+      if (score_known) it.printf(67, 163, id(helio_screen_value), score_fresh ? white : grey,
+                                 TextAlign::BASELINE_CENTER, "%.0f", id(helio_sleep_score).state);
+      else it.print(67, 163, id(helio_screen_value), grey, TextAlign::BASELINE_CENTER, "--");
+
+      it.line(7, 168, 127, 168, divider);
+      it.print(67, 188, id(helio_screen_label), grey, TextAlign::BASELINE_CENTER, "TOTAL SLEEP");
+      const bool duration_known = id(helio_night_sleep_duration).has_state() &&
+          std::isfinite(id(helio_night_sleep_duration).state);
+      const bool duration_fresh = duration_known && uint32_t(now - id(helio_duration_seen)) < 900000U;
+      if (duration_known) {
+        const int minutes = int(std::lround(id(helio_night_sleep_duration).state));
+        auto *duration_font = minutes >= 600 ? id(helio_screen_duration_wide) : id(helio_screen_value);
+        it.printf(67, 235, duration_font, duration_fresh ? white : grey, TextAlign::BASELINE_CENTER,
+                  "%d:%02d", minutes / 60, minutes % 60);
+      } else {
+        it.print(67, 235, id(helio_screen_duration_wide), grey, TextAlign::BASELINE_CENTER, "--:--");
+      }
