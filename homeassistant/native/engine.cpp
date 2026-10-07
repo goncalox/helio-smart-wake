@@ -82,7 +82,16 @@ class Engine {
     }
     if(!transfer.complete(false,0))throw std::runtime_error("Incomplete sleep batch");
     bridge.clock_value.now=std::max(bridge.clock_value.now,now);
-    if(now>=bridge.smart_read_at_)bridge.smart_observe_(transfer.latest(),now);
+    if(now>=bridge.smart_read_at_) {
+      auto snapshot=transfer.latest();bridge.smart_snapshot_=snapshot;bridge.smart_read_at_=now;
+      if(!smart_wake::usable_onset(bridge.smart_session_,snapshot,now))bridge.smart_candidate_=bridge.smart_candidate_since_=0;
+      else {
+        if(bridge.smart_candidate_!=snapshot.onset){bridge.smart_candidate_=snapshot.onset;bridge.smart_candidate_since_=now;}
+        if(bridge.smart_session_.onset==snapshot.onset || now>=bridge.smart_candidate_since_+300) {
+          bridge.smart_session_.onset=snapshot.onset;bridge.smart_session_.awake_minutes=snapshot.awake_minutes;
+        }
+      }
+    }
     for(size_t at=0;at<raw.size();at+=594) {
       auto *p=raw.data()+at;auto midnight=protocol::read32(p+4);if(midnight<1577836800U)continue;
       uint32_t onset=midnight-86400+protocol::read16(p+10)*60U;if(onset>now || onset<1577836800U)continue;
@@ -113,6 +122,29 @@ class Engine {
       learner.evaluate(now,automatic);learner.begin_training(now);while(learner.training)learner.train_slice(now,1024);
     }
   }
+  // Data preparation only: this path cannot choose or request an alarm.
+  void observe(uint32_t now,float hours,int window,bool learn,bool autoupdate) {
+    if(now<1577836800U || !std::isfinite(hours) || hours<6 || hours>10 || window<0 || window>60)
+      throw std::runtime_error("Invalid observation settings");
+    bridge.clock_value.now=now;learning=learn;automatic=autoupdate;bridge.smart_enabled_=true;
+    auto local=esphome::ESPTime::from_epoch_local(now);local.hour=18;local.minute=local.second=0;
+    local.recalc_timestamp_local();
+    if(local.timestamp>now){local.day_of_month-=1;local.recalc_timestamp_local();}
+    auto end=local;end.day_of_month+=1;end.recalc_timestamp_local();
+    if(bridge.smart_session_.night_start!=uint32_t(local.timestamp)) {
+      bridge.smart_session_={};bridge.smart_session_.night_start=local.timestamp;
+      bridge.smart_candidate_=bridge.smart_candidate_since_=0;
+    }
+    auto &session=bridge.smart_session_;session.session_end=end.timestamp;
+    session.settings={uint16_t(std::lround(hours*60)),uint16_t(window),0,0};
+    session.finished=session.early_selected=session.manual_override=session.cancel_pending=0;
+    session.confirmed=session.attempted=0;
+    bridge.smart_operation_=bridge.follow_operation_=false;bridge.phase_=HelioBridge::Phase::IDLE;
+    score.target_minutes=std::lround(hours*60);
+    bridge.smart_message_=session.onset?"Sleep observations ready; automation controls alarms":"Waiting for stable sleep onset; automation controls alarms";
+    bool live=bridge.smart_snapshot_.valid && !bridge.smart_snapshot_.is_nap && bridge.smart_snapshot_.through<=now && now-bridge.smart_snapshot_.through<=900;
+    if(learning && !live){learner.evaluate(now,automatic);learner.begin_training(now);while(learner.training)learner.train_slice(now,1024);}
+  }
   void output(bool save=false) {
     const auto now=bridge.clock_value.now;auto s=bridge.smart_session_;auto f=bridge.follow_;
     const auto &p=bridge.model_prediction_;auto *q=score.latest();unsigned nights=0;for(auto &n:score.nights)if(n.onset)++nights;
@@ -125,6 +157,13 @@ class Engine {
       <<",\"model_valid\":"<<p.valid<<",\"model_stage\":"<<unsigned(p.stage)<<",\"model_sample\":"<<p.sample_time
       <<",\"champion\":"<<learner.state.champion_version<<",\"candidate\":"<<learner.state.candidate_version<<",\"checked\":"<<learner.state.evaluated_nights
       <<",\"score\":"<<(q?q->ours:0)<<",\"score_coverage\":"<<(q?q->coverage:0)<<",\"score_nights\":"<<nights
+      <<",\"night\":"<<s.night_start<<",\"session_end\":"<<s.session_end
+      <<",\"raw_onset\":"<<bridge.smart_snapshot_.onset<<",\"raw_awake\":"<<bridge.smart_snapshot_.awake_minutes
+      <<",\"band_valid\":"<<bridge.smart_snapshot_.valid<<",\"complete\":"<<bridge.smart_snapshot_.accounting_complete
+      <<",\"nap\":"<<bridge.smart_snapshot_.is_nap<<",\"band_stage\":"<<unsigned(bridge.smart_snapshot_.stage)
+      <<",\"through\":"<<bridge.smart_snapshot_.through<<",\"read_at\":"<<bridge.smart_read_at_
+      <<",\"model_read_at\":"<<p.read_at<<",\"wear_state\":"<<unsigned(bridge.wear_.state)
+      <<",\"wear_sample\":"<<bridge.wear_.sample<<",\"wear_read_at\":"<<bridge.wear_.read_at
       <<",\"manual\":"<<manual<<",\"import_stamp\":"<<stamp;
     if(save)std::cout<<",\"checkpoint\":"<<std::quoted(hex(checkpoint()));std::cout<<"}"<<std::endl;
   }
@@ -138,9 +177,7 @@ int main() {
       else if(cmd=="RESTORE"){in>>data;auto v=unhex(data);if(v.size()!=sizeof(Checkpoint))throw std::runtime_error("Checkpoint size");Checkpoint p;memcpy(&p,v.data(),v.size());engine.restore(p);}
       else if(cmd=="SLEEP"){in>>now>>data;engine.sleep(unhex(data),now);}
       else if(cmd=="ACTIVITY"){in>>now>>start>>data;engine.activity(unhex(data),start,now);}
-      else if(cmd=="TICK"){float hours=0;int window=0;bool enabled=false,learning=false,automatic=false;in>>now>>hours>>window>>enabled>>learning>>automatic;engine.tick(now,hours,window,enabled,learning,automatic);}
-      else if(cmd=="ACK"){bool ok=false;in>>now>>ok;engine.bridge.clock_value.now=now;engine.bridge.ack(ok);}
-      else if(cmd=="MANUAL"){in>>now;engine.bridge.clock_value.now=now;engine.bridge.smart_manual_override_();++engine.manual;engine.bridge.phase_=HelioBridge::Phase::IDLE;}
+      else if(cmd=="OBSERVE"){float hours=0;int window=0;bool learn=false,autoupdate=false;in>>now>>hours>>window>>learn>>autoupdate;engine.observe(now,hours,window,learn,autoupdate);}
       else if(cmd!="SAVE" && cmd!="STATUS")throw std::runtime_error("Unknown command");
       if(in.fail() && cmd!="SAVE" && cmd!="STATUS")throw std::runtime_error("Malformed command");engine.output(cmd=="SAVE");
     } catch(const std::exception &e) {std::cout<<"{\"ok\":false,\"error\":"<<std::quoted(e.what())<<"}"<<std::endl;}

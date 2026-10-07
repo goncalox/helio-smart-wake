@@ -30,6 +30,18 @@ int main() {
   auto saved=restarted.checkpoint();Engine again;again.restore(saved);assert(again.bridge.follow_.stopped && !again.bridge.follow_.confirmed);
   again.bridge.smart_manual_override_();assert(again.bridge.smart_session_.manual_override);
   saved=again.checkpoint();Engine manual;manual.restore(saved);assert(manual.bridge.smart_session_.manual_override);
+  // The runtime observation path prepares data without invoking any alarm policy.
+  Engine data_only;data_only.bridge.smart_session_.night_start=now-3600;
+  data_only.observe(now,8.5,30,true,true);
+  data_only.bridge.smart_session_.onset=now-8*3600;
+  data_only.bridge.smart_snapshot_.valid=data_only.bridge.smart_snapshot_.accounting_complete=true;
+  data_only.bridge.smart_snapshot_.onset=data_only.bridge.smart_session_.onset;
+  data_only.bridge.smart_snapshot_.through=now;data_only.bridge.smart_snapshot_.stage=4;
+  data_only.bridge.model_prediction_.valid=true;data_only.bridge.model_prediction_.stage=4;
+  data_only.observe(now+1,8.5,30,true,true);
+  assert(!data_only.bridge.smart_operation_ && !data_only.bridge.writes && !data_only.bridge.cancels);
+  auto data_saved=data_only.checkpoint();Engine data_restart;data_restart.restore(data_saved);
+  data_restart.observe(now+2,8.5,30,true,true);assert(!data_restart.bridge.smart_operation_ && !data_restart.bridge.writes);
   // A corrupted score/learning checkpoint is rejected, not replaced with defaults.
   saved.score.format=999;bool rejected=false;try{manual.restore(saved);}catch(...){rejected=true;}assert(rejected);
   std::cout<<"Native HA policy: deep/light gate, 30-second rounding, restart, follow-up, removal, manual override and corrupt state passed\n";

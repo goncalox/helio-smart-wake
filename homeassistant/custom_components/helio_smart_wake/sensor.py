@@ -3,7 +3,7 @@ from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.const import EntityCategory
 from .entity import HelioEntity
 
-FIELDS = [("status", "Status"), ("mode", "Owner"), ("onset", "Sleep onset"),
+FIELDS = [("observations", "Sleep observations"), ("command_status", "Alarm instructions"), ("status", "Status"), ("mode", "Owner"), ("onset", "Sleep onset"),
           ("target", "Full sleep target"), ("confirmed", "Verified alarm"), ("awake", "Awake compensation"),
           ("model_stage", "Model stage"), ("score", "Experimental sleep score"),
           ("score_coverage", "Score coverage"), ("candidate", "Candidate model"), ("checked", "Validation nights")]
@@ -26,6 +26,8 @@ class HelioSensor(HelioEntity, SensorEntity):
 
     @property
     def native_value(self):
+        if self.key == "observations":
+            return max(self.controller.state.get("read_at", 0), self.controller.state.get("wear_read_at", 0))
         value = self.controller.state.get(self.key)
         if self.key in ("onset", "target", "confirmed"):
             return datetime.fromtimestamp(value, timezone.utc) if value else None
@@ -37,6 +39,13 @@ class HelioSensor(HelioEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
+        if self.key == "observations":
+            return {key: self.controller.state.get(key, 0) for key in (
+                "night", "session_end", "onset", "awake", "target", "raw_onset", "raw_awake", "band_valid", "complete", "nap", "band_stage",
+                "through", "read_at", "model_valid", "model_stage", "model_sample", "model_read_at", "wear_state", "wear_sample", "wear_read_at")}
+        if self.key == "command_status":
+            return {"pending": bool(self.controller.saved.get("command")), "last_instruction": self.controller.saved.get("last_instruction", {}),
+                    "verified_epoch": self.controller.saved.get("verified_epoch", 0), "manual": self.controller.saved.get("manual", 0)}
         if self.key == "status":
             return {key: self.controller.state.get(key) for key in ("connected", "cursor", "transport", "model_sample", "champion", "candidate", "checked", "score_nights")}
         if self.key == "score":

@@ -4,8 +4,10 @@ ESPHome firmware for a Waveshare ESP32-S3-GEEK and Amazfit Helio Strap.
 
 The ESP32 authenticates over Bluetooth, reads sleep/activity summaries, saves
 alarms with readback verification, and displays battery, Helio score and duration.
-The Home Assistant custom integration owns timing, models, learning, preferences
-and alarm decisions after an explicit handover; the ESP32 then provides BLE transport.
+After an explicit handover, the Home Assistant custom integration supplies sleep
+observations, models, learning and durable alarm services; a native, UI-editable
+**Helio smart wake routine** automation owns every wake decision.
+The ESP32 provides BLE transport and never runs a second wake controller in this mode.
 Before handover, the retained local ESP32 controller operates as before.
 Neither mode requires an always-on Mac.
 See [installation, migration and failure behaviour](docs/home-assistant-controller.md).
@@ -130,9 +132,10 @@ The next successful fetch can recover stored sleep records within the last 48 ho
 and activity records within the last 30 minutes, if still available on the strap.
 It cannot recover a missed real-time opportunity to schedule an early alarm.
 
-Settings are captured when a night is armed.
-To rearm with changed settings, disable smart wake, wait for verified cancellation,
-then enable it again.
+In HA mode, duration and window changes are read by the automation on its next run;
+a selected early alarm remains locked for that night.
+Retained ESP local mode captures settings when a night is armed; to rearm there,
+disable smart wake, wait for verified cancellation, then enable it again.
 An independent backup alarm can be set directly in Zepp.
 
 ## Logging and desktop tools
@@ -263,6 +266,8 @@ Synthetic fixtures are included; private overnight recordings are not.
 - `helio-bridge.yaml`: portable base configuration with secret references.
 - `diagnostics/`: decoder, journal downloader, feature/model tools and frozen coefficients.
 - `tools/`: portable encrypted ESPHome API helper.
+- `homeassistant/custom_components/helio_smart_wake/`: observations, models and explicit durable alarm services.
+- `homeassistant/automation/`: native wake automation and its reproducible configuration builder.
 - `tests/`: host regression tests and synthetic inference checks.
 
 ## References and attribution

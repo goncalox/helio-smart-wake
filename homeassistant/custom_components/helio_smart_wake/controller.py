@@ -50,7 +50,7 @@ class Controller:
         if self.saved.get("checkpoint"):
             await self.engine("RESTORE " + self.saved["checkpoint"])
         self.task = self.entry.async_create_background_task(self.hass, self.run(), "Helio journal")
-        self.control_task = self.entry.async_create_background_task(self.hass, self.control(), "Helio live decisions")
+        self.control_task = self.entry.async_create_background_task(self.hass, self.control(), "Helio data and command transport")
 
     async def restart_worker(self):
         # Recover only from the last committed HA Store checkpoint.
@@ -74,7 +74,8 @@ class Controller:
         if self.client:
             await self.client.disconnect()
         if self.process:
-            self.process.terminate()
+            if self.process.returncode is None:
+                self.process.terminate()
             await self.process.wait()
 
     async def engine(self, command):
@@ -112,6 +113,9 @@ class Controller:
         self.state["connected"] = self.connected
         self.state["cursor"] = self.saved.get("cursor", 0)
         self.state["transport"] = self.transport.copy()
+        if self.saved.get("automation_transport"):
+            self.state["confirmed"] = self.saved.get("verified_epoch", 0)
+        self.state["command_status"] = "pending" if self.saved.get("command") else self.saved.get("last_instruction", {}).get("result", "idle")
         async_dispatcher_send(self.hass, self.signal)
 
     async def setting(self, key, value):
@@ -253,66 +257,101 @@ class Controller:
             seen = seen[-2048:]
         self.saved["seen"] = seen
 
+    async def request_alarm(self, epoch, request_id, context=None, cancel=False):
+        """Accept an explicit automation instruction; never infer a wake decision."""
+        async with self.lock:
+            now = int(time.time())
+            if not self.connected or not self.saved.get("active") or self.transport.get("owner") != 1:
+                raise HomeAssistantError("Bridge must be connected and owned by Home Assistant")
+            if not cancel and (epoch % 60 or epoch < now + 30 or epoch >= now + 24 * 3600 - 60):
+                raise HomeAssistantError("Use a dated future minute with at least a 30-second buffer")
+            await self.reconcile(now)
+            last = self.saved.get("last_instruction", {})
+            if last.get("request_id") == request_id:
+                if last.get("epoch") != epoch or last.get("cancel") != cancel:
+                    raise HomeAssistantError("Request ID already used for a different instruction")
+                if last.get("result") == "verified" or self.saved.get("command"):
+                    await self.persist()  # a failed save must not become an in-memory success
+                    return {"command_id": last["command_id"], "result": last["result"]}
+            if self.saved.get("command"):
+                raise HomeAssistantError("Previous alarm instruction is still pending")
+            previous = self.saved.get("verified_epoch", 0)
+            if not cancel and previous and 0 <= previous - now < 10:
+                raise HomeAssistantError("Previous alarm is too close to replace safely")
+            if len(json.dumps(context or {})) > 2048:
+                raise HomeAssistantError("Instruction context too large")
+            command = {"command_id": max(self.saved.get("next_id", 0), self.transport.get("id", 0)) + 1,
+                "epoch": epoch, "previous": previous, "expires": now + 100,
+                "cancel": bool(cancel), "follow": bool((context or {}).get("follow", False)),
+                "request_id": request_id, "context": context or {}, "result": "pending"}
+            self.saved["next_id"] = command["command_id"]
+            self.saved["command"] = command
+            self.saved["last_instruction"] = command.copy()
+            await self.persist()
+            await self.audit("alarm_requested", **command)
+            self.publish()
+            await self.reconcile(now)
+            return {"command_id": command["command_id"], "result": "pending"}
+
+    async def refresh(self, frequent=False):
+        async with self.lock:
+            if not self.connected or self.transport.get("owner") != 1:
+                raise HomeAssistantError("Bridge is unavailable")
+            now = int(time.time())
+            if frequent:
+                await self.action("helio_controller_fast", {"expires": now + 90})
+            if now - self.last_read_request >= 60:
+                await self.action("helio_read_sleep", {})
+                self.last_read_request = now
+
     async def reconcile(self, now):
+        # Only retry/adopt an already accepted instruction, never create one from data.
         if not self.saved.get("active") or self.transport.get("owner") != 1:
             return
         manual = self.transport.get("manual")
         if manual is not None and manual != self.saved.get("manual"):
             self.saved["manual"] = manual
             self.saved["command"] = None
-            await self.engine(f"MANUAL {now}")
+            self.saved["verified_epoch"] = 0
+            self.saved["last_instruction"] = {"result": "manual", "manual": manual}
             await self.persist()
             await self.audit("manual_override")
         command = self.saved.get("command")
-        if command:
-            if self.transport.get("id") == command["command_id"] and self.transport.get("status") == 2:
-                if self.transport.get("epoch") != command["epoch"]:
-                    raise HomeAssistantError("Wrong verified alarm epoch")
-                await self.engine(f"ACK {now} 1")
-                self.saved["command"] = None
-                await self.persist()
-                await self.audit("alarm_verified", **command)
-            elif now > command["expires"]:
-                await self.engine(f"ACK {now} 0")
-                self.saved["command"] = None
-                await self.persist()
-                await self.audit("alarm_unverified", **command)
-            elif self.transport.get("idle") and now >= command.get("retry_at", 0):
-                await self.persist()  # a prior failed save must not permit an in-memory retry
-                await self.action("helio_controller_alarm", {k: command[k] for k in ("command_id", "epoch", "expires", "previous", "cancel", "follow")})
-                command["retry_at"] = now + 10
+        if not command:
             return
-        if self.state.get("pending"):
-            command = {"command_id": self.saved.get("next_id", 0) + 1,
-                "epoch": self.state["epoch"], "previous": self.state["previous"],
-                "expires": now + 100, "cancel": bool(self.state["cancel"]), "follow": bool(self.state["follow"])}
-            self.saved["next_id"] = command["command_id"]
-            self.saved["command"] = command
-            await self.persist()  # persist intent and uncertain policy state BEFORE network I/O
-            await self.audit("alarm_requested", **command)
-            if self.transport.get("idle"):
-                await self.action("helio_controller_alarm", {k: command[k] for k in ("command_id", "epoch", "expires", "previous", "cancel", "follow")})
-                command["retry_at"] = now + 10
+        if self.transport.get("id") == command["command_id"] and self.transport.get("status") == 2:
+            if self.transport.get("epoch") != command["epoch"]:
+                raise HomeAssistantError("Wrong verified alarm epoch")
+            self.saved["verified_epoch"] = 0 if command["cancel"] else command["epoch"]
+            self.saved["last_instruction"] = {**command, "result": "verified"}
+            self.saved["command"] = None
+            await self.persist()
+            await self.audit("alarm_verified", **command)
+            self.hass.bus.async_fire("helio_smart_wake.alarm_verified", {"entry_id": self.entry.entry_id,
+                "timestamp": command["epoch"], "cancelled": command["cancel"], "command_id": command["command_id"]})
+        elif now > command["expires"]:
+            self.saved["last_instruction"] = {**command, "result": "unverified"}
+            self.saved["command"] = None
+            await self.persist()
+            await self.audit("alarm_unverified", **command)
+        elif self.transport.get("idle") and now >= command.get("retry_at", 0):
+            await self.persist()
+            await self.action("helio_controller_alarm", {k: command[k] for k in ("command_id", "epoch", "expires", "previous", "cancel", "follow")})
+            command["retry_at"] = now + 10
 
     async def tick(self):
         now = int(time.time())
         s = self.settings
-        if self.saved.get("active") and self.transport.get("owner") != 1:
-            self.state["status"] = "ESP32 owns decisions; Home Assistant paused"
-            return
         if now < self.state.get("now", 0) - 5:
             raise HomeAssistantError("Clock moved backwards")
-        await self.engine(f"TICK {now} {s['hours']} {s['window']} {int(s['enabled'])} {int(s['learning'])} {int(s['automatic'])}")
-        if self.saved.get("active"):
-            if self.transport.get("owner") != 1:
-                self.state["status"] = "ESP32 owns decisions; Home Assistant paused"
-                return
-            await self.reconcile(now)
-            if self.state.get("fast"):
-                await self.action("helio_controller_fast", {"expires": now + 90})
-                if now - self.last_read_request >= 60:
-                    await self.action("helio_read_sleep", {})
-                    self.last_read_request = now
+        if not self.saved.get("automation_transport"):
+            if self.saved.get("command") or self.state.get("pending") or self.state.get("confirmed", 0) > now:
+                raise HomeAssistantError("Switch to automation ownership outside a pending alarm")
+            self.saved["automation_transport"] = True
+            self.saved.setdefault("verified_epoch", 0)
+            await self.audit("automation_ownership_enabled")
+        await self.engine(f"OBSERVE {now} {s['hours']} {s['window']} {int(s['learning'])} {int(s['automatic'])}")
+        await self.reconcile(now)
         await self.persist()
 
     async def activate(self):

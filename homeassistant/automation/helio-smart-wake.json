@@ -1,0 +1,677 @@
+{
+  "id": "helio_smart_wake_routine_v2",
+  "alias": "Helio smart wake routine",
+  "description": "Owns wake decisions: stable sleep onset + 8.5h target with awake compensation, fresh aligned Light/Awake agreement, 30s buffer and 5min reminders while worn. The integration supplies data and executes explicit verified commands. No fixed wake deadline.",
+  "mode": "queued",
+  "max": 10,
+  "max_exceeded": "silent",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": [
+        "sensor.helio_smart_wake_sleep_observations",
+        "sensor.helio_smart_wake_alarm_instructions",
+        "binary_sensor.helio_smart_wake_bridge_connected",
+        "switch.helio_smart_wake_smart_wake",
+        "number.helio_smart_wake_sleep_target",
+        "number.helio_smart_wake_wake_window"
+      ]
+    },
+    {
+      "trigger": "time_pattern",
+      "seconds": "/10"
+    },
+    {
+      "trigger": "homeassistant",
+      "event": "start"
+    },
+    {
+      "trigger": "time",
+      "at": "sensor.helio_smart_wake_verified_alarm",
+      "id": "saved_wake_time"
+    }
+  ],
+  "conditions": [
+    {
+      "condition": "state",
+      "entity_id": "binary_sensor.helio_smart_wake_bridge_connected",
+      "state": "on"
+    },
+    {
+      "condition": "state",
+      "entity_id": "sensor.helio_smart_wake_owner",
+      "state": "Home Assistant"
+    }
+  ],
+  "actions": [
+    {
+      "alias": "Read current data when this queued run actually starts",
+      "variables": {
+        "clock": "{{ now().timestamp() | int }}",
+        "d": "{{ states['sensor.helio_smart_wake_sleep_observations'].attributes | default({}, true) | to_json | from_json }}",
+        "commands": "{{ states['sensor.helio_smart_wake_alarm_instructions'].attributes | default({}, true) | to_json | from_json }}",
+        "old": "{{ (states('input_text.helio_wake_session')[3:] | from_json({})) if states('input_text.helio_wake_session').startswith('V2:') else {} }}"
+      }
+    },
+    {
+      "variables": {
+        "night": "{{ old.get(\"n\",0) if old.get(\"p\",0)>0 and not old.get(\"x\",0) and clock < as_timestamp(as_local(as_datetime(old.p)).replace(hour=18,minute=0,second=0,microsecond=0) + timedelta(days=1 if as_local(as_datetime(old.p)).hour>=18 else 0)) else (d.get(\"night\",0) | int) }}",
+        "manual": "{{ commands.get(\"manual\", 0) | int }}",
+        "verified": "{{ commands.get(\"verified_epoch\", 0) | int }}",
+        "last": "{{ commands.get(\"last_instruction\", {}) }}",
+        "window": "{{ states(\"number.helio_smart_wake_wake_window\") | int(30) * 60 }}"
+      }
+    },
+    {
+      "variables": {
+        "s": "{{ old if old.get(\"n\",0)==night else dict(n=night,p=0,a=0,e=0,x=0,m=manual,c=0,t=0,o=0,w=0) }}"
+      }
+    },
+    {
+      "alias": "Start a durable dated night before any alarm",
+      "if": [
+        {
+          "condition": "template",
+          "value_template": "{{ night>0 and old.get(\"n\",0)!=night }}"
+        }
+      ],
+      "then": [
+        {
+          "alias": "Persist the dated automation state",
+          "action": "input_text.set_value",
+          "target": {
+            "entity_id": "input_text.helio_wake_session"
+          },
+          "data": {
+            "value": "{{ 'V2:' ~ (s | to_json) }}"
+          }
+        }
+      ]
+    },
+    {
+      "alias": "Recover caller state from a durable accepted instruction",
+      "if": [
+        {
+          "condition": "template",
+          "value_template": "{{ last.get(\"context\",{}).get(\"routine_state\",{}).get(\"n\",0)==night and last.get(\"context\",{}).get(\"routine_state\",{}).get(\"m\",-1)==manual and last.get(\"command_id\",0)>s.get(\"c\",0) }}"
+        }
+      ],
+      "then": [
+        {
+          "variables": {
+            "s": "{{ dict(last.context.routine_state, c=last.command_id) }}"
+          }
+        },
+        {
+          "alias": "Persist the dated automation state",
+          "action": "input_text.set_value",
+          "target": {
+            "entity_id": "input_text.helio_wake_session"
+          },
+          "data": {
+            "value": "{{ 'V2:' ~ (s | to_json) }}"
+          }
+        }
+      ]
+    },
+    {
+      "alias": "Remember external manual control for this dated night",
+      "if": [
+        {
+          "condition": "template",
+          "value_template": "{{ s.m != manual }}"
+        }
+      ],
+      "then": [
+        {
+          "variables": {
+            "s": "{{ dict(s, x=2, m=manual) }}"
+          }
+        },
+        {
+          "alias": "Persist the dated automation state",
+          "action": "input_text.set_value",
+          "target": {
+            "entity_id": "input_text.helio_wake_session"
+          },
+          "data": {
+            "value": "{{ 'V2:' ~ (s | to_json) }}"
+          }
+        }
+      ]
+    },
+    {
+      "alias": "Re-enable before the original wake time, if only disabled",
+      "if": [
+        {
+          "condition": "state",
+          "entity_id": "switch.helio_smart_wake_smart_wake",
+          "state": "on"
+        },
+        {
+          "condition": "template",
+          "value_template": "{{ s.x==4 and (not s.p or clock<s.p) }}"
+        }
+      ],
+      "then": [
+        {
+          "variables": {
+            "s": "{{ dict(s, x=0, p=0, a=0, e=0) }}"
+          }
+        },
+        {
+          "alias": "Persist the dated automation state",
+          "action": "input_text.set_value",
+          "target": {
+            "entity_id": "input_text.helio_wake_session"
+          },
+          "data": {
+            "value": "{{ 'V2:' ~ (s | to_json) }}"
+          }
+        }
+      ]
+    },
+    {
+      "variables": {
+        "onset": "{{ d.get(\"onset\",0) if d.get(\"night\",0)==night else s.get(\"o\",0) }}",
+        "awake": "{{ d.get(\"awake\",0) if d.get(\"night\",0)==night else (d.get(\"raw_awake\",0) if d.get(\"band_valid\",false) and d.get(\"complete\",false) and not d.get(\"nap\",true) and d.get(\"raw_onset\",0)==s.get(\"o\",0) and d.get(\"through\",0)>=clock-180 and d.get(\"through\",0)<=clock+60 else s.get(\"w\",0)) }}"
+      }
+    },
+    {
+      "variables": {
+        "target": "{{ ((((onset | int) + (states(\"number.helio_smart_wake_sleep_target\") | float(8.5) * 3600) + (awake | int * 60) + 59) // 60) * 60) | int if onset else 0 }}"
+      }
+    },
+    {
+      "alias": "Request minute reads near waking and during reminders",
+      "if": [
+        {
+          "condition": "state",
+          "entity_id": "switch.helio_smart_wake_smart_wake",
+          "state": "on"
+        },
+        {
+          "condition": "template",
+          "value_template": "{{ not s.x and night>0 and clock<d.get(\"session_end\",0) and ((s.p>0 and clock>=s.p) or (target>clock and target-clock<=[900,window] | max)) }}"
+        }
+      ],
+      "then": [
+        {
+          "action": "helio_smart_wake.refresh",
+          "data": {
+            "frequent": true
+          }
+        }
+      ]
+    },
+    {
+      "alias": "Wait for the current explicit instruction to finish",
+      "condition": "template",
+      "value_template": "{{ not commands.get(\"pending\",false) }}"
+    },
+    {
+      "alias": "Select a wake action from the current data",
+      "choose": [
+        {
+          "alias": "Smart wake disabled: cancel a future owned alarm",
+          "conditions": [
+            {
+              "condition": "state",
+              "entity_id": "switch.helio_smart_wake_smart_wake",
+              "state": "off"
+            }
+          ],
+          "sequence": [
+            {
+              "if": [
+                {
+                  "condition": "template",
+                  "value_template": "{{ s.x!=4 }}"
+                }
+              ],
+              "then": [
+                {
+                  "variables": {
+                    "s": "{{ dict(s,x=4) }}"
+                  }
+                },
+                {
+                  "alias": "Persist the dated automation state",
+                  "action": "input_text.set_value",
+                  "target": {
+                    "entity_id": "input_text.helio_wake_session"
+                  },
+                  "data": {
+                    "value": "{{ 'V2:' ~ (s | to_json) }}"
+                  }
+                }
+              ]
+            },
+            {
+              "if": [
+                {
+                  "condition": "template",
+                  "value_template": "{{ verified>clock }}"
+                }
+              ],
+              "then": [
+                {
+                  "alias": "Prepare the next dated state",
+                  "variables": {
+                    "next_state": "{{ dict(s, a=0, x=4) }}"
+                  }
+                },
+                {
+                  "alias": "Cancel the bridge-owned alarm",
+                  "action": "helio_smart_wake.cancel_alarm",
+                  "data": {
+                    "request_id": "{{ s.n ~ '-off-' ~ (verified) ~ '-' ~ manual }}",
+                    "context": {
+                      "routine_state": "{{ next_state }}",
+                      "follow": false,
+                      "reason": "off"
+                    }
+                  },
+                  "response_variable": "receipt"
+                },
+                {
+                  "variables": {
+                    "s": "{{ dict(next_state, c=receipt.command_id) }}"
+                  }
+                },
+                {
+                  "alias": "Persist the dated automation state",
+                  "action": "input_text.set_value",
+                  "target": {
+                    "entity_id": "input_text.helio_wake_session"
+                  },
+                  "data": {
+                    "value": "{{ 'V2:' ~ (s | to_json) }}"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "Manual control pauses this night",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.x==2 }}"
+            }
+          ],
+          "sequence": [
+            {
+              "stop": "Manual alarm control; wait for the next dated night"
+            }
+          ]
+        },
+        {
+          "alias": "A fresh removal after the first alarm stops reminders",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.p>0 and clock>=s.p and d.get(\"wear_state\",0)==2 and d.get(\"wear_sample\",0)>=s.p and d.get(\"wear_sample\",0)<=clock and clock-d.get(\"wear_sample\",0)<=180 and d.get(\"wear_read_at\",0)<=clock and clock-d.get(\"wear_read_at\",0)<=90 }}"
+            }
+          ],
+          "sequence": [
+            {
+              "variables": {
+                "s": "{{ dict(s, x=1) }}"
+              }
+            },
+            {
+              "alias": "Persist the dated automation state",
+              "action": "input_text.set_value",
+              "target": {
+                "entity_id": "input_text.helio_wake_session"
+              },
+              "data": {
+                "value": "{{ 'V2:' ~ (s | to_json) }}"
+              }
+            },
+            {
+              "if": [
+                {
+                  "condition": "template",
+                  "value_template": "{{ verified>clock }}"
+                }
+              ],
+              "then": [
+                {
+                  "alias": "Prepare the next dated state",
+                  "variables": {
+                    "next_state": "{{ dict(s,a=0,x=1) }}"
+                  }
+                },
+                {
+                  "alias": "Cancel the bridge-owned alarm",
+                  "action": "helio_smart_wake.cancel_alarm",
+                  "data": {
+                    "request_id": "{{ s.n ~ '-removed-' ~ (verified) ~ '-' ~ manual }}",
+                    "context": {
+                      "routine_state": "{{ next_state }}",
+                      "follow": true,
+                      "reason": "removed"
+                    }
+                  },
+                  "response_variable": "receipt"
+                },
+                {
+                  "variables": {
+                    "s": "{{ dict(next_state, c=receipt.command_id) }}"
+                  }
+                },
+                {
+                  "alias": "Persist the dated automation state",
+                  "action": "input_text.set_value",
+                  "target": {
+                    "entity_id": "input_text.helio_wake_session"
+                  },
+                  "data": {
+                    "value": "{{ 'V2:' ~ (s | to_json) }}"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "Continue cancellation while a stopped reminder remains",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.x==1 and verified>clock }}"
+            }
+          ],
+          "sequence": [
+            {
+              "alias": "Prepare the next dated state",
+              "variables": {
+                "next_state": "{{ dict(s,a=0,x=1) }}"
+              }
+            },
+            {
+              "alias": "Cancel the bridge-owned alarm",
+              "action": "helio_smart_wake.cancel_alarm",
+              "data": {
+                "request_id": "{{ s.n ~ '-removed-' ~ (verified) ~ '-' ~ manual }}",
+                "context": {
+                  "routine_state": "{{ next_state }}",
+                  "follow": true,
+                  "reason": "removed"
+                }
+              },
+              "response_variable": "receipt"
+            },
+            {
+              "variables": {
+                "s": "{{ dict(next_state, c=receipt.command_id) }}"
+              }
+            },
+            {
+              "alias": "Persist the dated automation state",
+              "action": "input_text.set_value",
+              "target": {
+                "entity_id": "input_text.helio_wake_session"
+              },
+              "data": {
+                "value": "{{ 'V2:' ~ (s | to_json) }}"
+              }
+            }
+          ]
+        },
+        {
+          "alias": "Expired uncertain writes never arm a later alarm",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.a>0 and s.a!=verified and s.a<=clock and not s.x }}"
+            }
+          ],
+          "sequence": [
+            {
+              "variables": {
+                "s": "{{ dict(s,x=3) }}"
+              }
+            },
+            {
+              "alias": "Persist the dated automation state",
+              "action": "input_text.set_value",
+              "target": {
+                "entity_id": "input_text.helio_wake_session"
+              },
+              "data": {
+                "value": "{{ 'V2:' ~ (s | to_json) }}"
+              }
+            }
+          ]
+        },
+        {
+          "alias": "Stopped nights remain stopped",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.x>0 }}"
+            }
+          ],
+          "sequence": [
+            {
+              "stop": "This dated wake sequence has stopped"
+            }
+          ]
+        },
+        {
+          "alias": "Repeat five minutes later only with fresh worn data",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.p>0 and clock>=s.p and verified>0 and clock>=verified and s.a==verified and d.get(\"wear_state\",0)==1 and d.get(\"wear_sample\",0)>=verified and d.get(\"wear_sample\",0)<=clock and clock-d.get(\"wear_sample\",0)<=180 and d.get(\"wear_read_at\",0)<=clock and clock-d.get(\"wear_read_at\",0)<=90 }}"
+            }
+          ],
+          "sequence": [
+            {
+              "variables": {
+                "next_alarm": "{{ ((([verified+300,clock+30] | max)+59)//60)*60 }}"
+              }
+            },
+            {
+              "condition": "template",
+              "value_template": "{{ next_alarm<d.get(\"session_end\",0) }}"
+            },
+            {
+              "alias": "Prepare the next dated state",
+              "variables": {
+                "next_state": "{{ dict(s,a=next_alarm) }}"
+              }
+            },
+            {
+              "alias": "Ask the integration to save and verify the alarm",
+              "action": "helio_smart_wake.set_alarm",
+              "data": {
+                "when": "{{ next_alarm }}",
+                "request_id": "{{ s.n ~ '-follow-' ~ (next_alarm) ~ '-' ~ manual }}",
+                "context": {
+                  "routine_state": "{{ next_state }}",
+                  "follow": true,
+                  "reason": "follow"
+                }
+              },
+              "response_variable": "receipt"
+            },
+            {
+              "variables": {
+                "s": "{{ dict(next_state, c=receipt.command_id) }}"
+              }
+            },
+            {
+              "alias": "Persist the dated automation state",
+              "action": "input_text.set_value",
+              "target": {
+                "entity_id": "input_text.helio_wake_session"
+              },
+              "data": {
+                "value": "{{ 'V2:' ~ (s | to_json) }}"
+              }
+            }
+          ]
+        },
+        {
+          "alias": "Wait after the first alarm if wear evidence is missing",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.p>0 and clock>=s.p }}"
+            }
+          ],
+          "sequence": [
+            {
+              "stop": "Waiting for fresh worn or removed evidence"
+            }
+          ]
+        },
+        {
+          "alias": "Stop if the full sleep target passed without scheduling",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ target>0 and clock>=target }}"
+            }
+          ],
+          "sequence": [
+            {
+              "variables": {
+                "s": "{{ dict(s,x=3) }}"
+              }
+            },
+            {
+              "alias": "Persist the dated automation state",
+              "action": "input_text.set_value",
+              "target": {
+                "entity_id": "input_text.helio_wake_session"
+              },
+              "data": {
+                "value": "{{ 'V2:' ~ (s | to_json) }}"
+              }
+            }
+          ]
+        },
+        {
+          "alias": "Choose early waking when both sources report Light or Awake",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ not s.e and target>clock and window>0 and clock>=target-window and d.get(\"band_valid\",false) and d.get(\"complete\",false) and not d.get(\"nap\",true) and d.get(\"raw_onset\",0)==onset and d.get(\"raw_awake\",-1)==awake and d.get(\"band_stage\",0) in [4,7] and d.get(\"through\",0)<=clock+60 and d.get(\"through\",0)>=clock-180 and d.get(\"read_at\",0)<=clock and d.get(\"read_at\",0)>=clock-90 and d.get(\"model_valid\",false) and d.get(\"model_stage\",0) in [4,7] and d.get(\"model_sample\",0)<=clock and d.get(\"model_sample\",0)>=clock-180 and d.get(\"model_read_at\",0)<=clock and d.get(\"model_read_at\",0)>=clock-90 and ((d.get(\"model_sample\",0)-d.get(\"through\",0)) | abs)<=60 and ((clock+89)//60)*60<target and (not verified or verified>=clock+30) }}"
+            }
+          ],
+          "sequence": [
+            {
+              "variables": {
+                "early_alarm": "{{ ((clock+89)//60)*60 }}"
+              }
+            },
+            {
+              "alias": "Prepare the next dated state",
+              "variables": {
+                "next_state": "{{ dict(s,p=early_alarm,a=early_alarm,e=1,t=target,o=onset,w=awake) }}"
+              }
+            },
+            {
+              "alias": "Ask the integration to save and verify the alarm",
+              "action": "helio_smart_wake.set_alarm",
+              "data": {
+                "when": "{{ early_alarm }}",
+                "request_id": "{{ s.n ~ '-early-' ~ (early_alarm) ~ '-' ~ manual }}",
+                "context": {
+                  "routine_state": "{{ next_state }}",
+                  "follow": false,
+                  "reason": "early"
+                }
+              },
+              "response_variable": "receipt"
+            },
+            {
+              "variables": {
+                "s": "{{ dict(next_state, c=receipt.command_id) }}"
+              }
+            },
+            {
+              "alias": "Persist the dated automation state",
+              "action": "input_text.set_value",
+              "target": {
+                "entity_id": "input_text.helio_wake_session"
+              },
+              "data": {
+                "value": "{{ 'V2:' ~ (s | to_json) }}"
+              }
+            }
+          ]
+        },
+        {
+          "alias": "Lock a selected early alarm, including an uncertain write",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ s.e==1 }}"
+            }
+          ],
+          "sequence": [
+            {
+              "stop": "Selected early alarm remains locked; retain the last verified alarm"
+            }
+          ]
+        },
+        {
+          "alias": "Save or update the full sleep-duration target",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ night>0 and target>=clock+30 and target<clock+24*3600-60 and target!=verified and (not verified or verified>=clock+30) }}"
+            }
+          ],
+          "sequence": [
+            {
+              "alias": "Prepare the next dated state",
+              "variables": {
+                "next_state": "{{ dict(s,p=target,a=target,t=target,o=onset,w=awake) }}"
+              }
+            },
+            {
+              "alias": "Ask the integration to save and verify the alarm",
+              "action": "helio_smart_wake.set_alarm",
+              "data": {
+                "when": "{{ target }}",
+                "request_id": "{{ s.n ~ '-target-' ~ (target) ~ '-' ~ manual }}",
+                "context": {
+                  "routine_state": "{{ next_state }}",
+                  "follow": false,
+                  "reason": "target"
+                }
+              },
+              "response_variable": "receipt"
+            },
+            {
+              "variables": {
+                "s": "{{ dict(next_state, c=receipt.command_id) }}"
+              }
+            },
+            {
+              "alias": "Persist the dated automation state",
+              "action": "input_text.set_value",
+              "target": {
+                "entity_id": "input_text.helio_wake_session"
+              },
+              "data": {
+                "value": "{{ 'V2:' ~ (s | to_json) }}"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "trace": {
+    "stored_traces": 20
+  }
+}
