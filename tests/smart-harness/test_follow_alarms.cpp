@@ -37,6 +37,10 @@ int main() {
  b.phase_=HelioBridge::Phase::ALARM_VERIFY;b.handle_alarms_(list({{3,8,0,127,4}}));assert(!b.follow_.cancel_pending && !b.owned_.valid);
  b=pending();b.follow_.cancel_pending=b.follow_.stopped=1;b.operation_=HelioBridge::Operation::CANCEL_ALARM;
  b.handle_alarms_(list({{2,6,0,127,4}}));assert(b.command.empty() && !b.follow_.cancel_pending);
+ // HA-owned cancellation also reports manual edits when no local follow-up is running.
+ b=pending();b.remote_.owner=1;b.remote_inflight_=true;b.follow_operation_=false;
+ b.operation_=HelioBridge::Operation::CANCEL_ALARM;
+ b.handle_alarms_(list({{2,6,0,127,4}}));assert(b.command.empty() && b.remote_.manual==1);
  // The primary scheduling guard accepts 30s selection after normal 8s connection.
  b=pending();b.follow_operation_=false;b.smart_session_.finished=0;b.smart_session_.confirmed=at(11);
  b.smart_session_.attempted=at(10,3);b.requested_={1,2,10,3,0};b.owned_={1,2,11,0,0};b.clock_->now=at(10,2,38);

@@ -3,14 +3,17 @@
 ESPHome firmware for a Waveshare ESP32-S3-GEEK and Amazfit Helio Strap.
 
 The ESP32 authenticates over Bluetooth, reads sleep/activity summaries, saves
-alarms with readback verification, and runs an experimental sleep-stage model.
-Home Assistant provides controls and status; runtime timing, inference and
-alarm scheduling run on the ESP32 without an always-on computer or Home Assistant.
+alarms with readback verification, and displays battery, Helio score and duration.
+The Home Assistant custom integration owns timing, models, learning, preferences
+and alarm decisions after an explicit handover; the ESP32 then provides BLE transport.
+Before handover, the retained local ESP32 controller operates as before.
+Neither mode requires an always-on Mac.
+See [installation, migration and failure behaviour](docs/home-assistant-controller.md).
 Once successfully saved, an alarm runs on the strap itself.
 
 ## Personal sleep-quality score
 
-A separate experimental **0–100 personal sleep score** runs on the ESP32 using
+A separate experimental **0–100 personal sleep score** runs on the selected controller using
 nighttime duration, awakening length/clusters, timing, heart-rate patterns,
 movement bursts and recent short nights.
 It needs no daily ratings or daytime readings and does not learn toward Helio's score.
@@ -19,7 +22,7 @@ with short-night context available after three; missing components and
 provisional records are visible in Home Assistant and the onboard comparison audit.
 This is a heuristic pilot, not a validated predictor or proven improvement over Helio.
 The v2 upgrade preserves v1 scores and recovers available recent minute data from
-the ESP32's existing logs without requiring a computer.
+the ESP32's existing logs; HA migration preserves the complete saved score history.
 See [formula, adaptation and comparison limits](docs/personal-sleep-score.md).
 
 ## Wake behavior
@@ -184,12 +187,14 @@ Agreement at scheduling cannot establish the physiological sleep stage when
 the strap vibrates 30–89 seconds later (plus any scheduling/connection delay).
 The full sleep-duration alarm remains the fallback when the early gate is not met.
 
-## Continuous learning on the ESP32
+## Continuous learning
 
 Learning and automatic checked updates default to **on** in this package.
-Home Assistant exposes **Helio Model Learning**, **Helio Automatic Model Updates**,
-and **Helio Model Learning Status**; no computer, scheduled job or Home Assistant
-connection is needed for training, comparison or activation.
+After handover the Home Assistant integration owns training, comparison, activation
+and durable model history; use its **Model learning** and **Automatic model updates** controls.
+The descriptions of ESP storage and idle training below apply to retained local mode.
+Both owners use the same feature definitions, settled-label rules and validation gates.
+Neither mode requires a Mac or scheduled desktop task.
 Turning learning off stops collection/training and retains the current active model;
 turning automatic updates off keeps a qualified candidate waiting until updates are enabled again.
 
@@ -231,7 +236,10 @@ Learning disables itself if memory/storage is unavailable; the original model co
 Rolling diagnostic batches may be evicted earlier to leave room for atomic learning saves.
 Model versions, candidate votes, evaluation counts and coefficient changes are logged,
 so reviews can distinguish baseline predictions from adaptive ones.
-Private learned weights and training records are stored on the device, not in GitHub.
+Private learned weights and training records remain on the selected controller host,
+not in GitHub.
+See [Home Assistant controller](docs/home-assistant-controller.md) for HA storage,
+restart recovery and single ownership after migration.
 
 The model remains one half of the existing early-wake gate: the strap must also
 report fresh, aligned Light/Awake inside the selected window.

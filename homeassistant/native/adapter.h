@@ -45,7 +45,7 @@ struct Clock { uint32_t now{}; ESPTime utcnow() {return ESPTime::from_epoch_utc(
 namespace helio_bridge {
 struct HelioBridge {
   remote::State remote_{};bool remote_inflight_{};
-  void remote_manual_() {if(remote_.owner)++remote_.manual;}
+  void remote_manual_() {}
   void remote_result_(bool) {}
 
   enum class Phase { IDLE, BUSY, ALARMS, ALARM_VERIFY, ALARM_WRITE }; enum class Operation { SET_ALARM, CANCEL_ALARM, TEST };

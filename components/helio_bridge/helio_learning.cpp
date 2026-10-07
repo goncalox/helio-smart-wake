@@ -101,6 +101,7 @@ void HelioBridge::learning_observe_(const stage_model::Prediction &base) {
   diagnostic_append_(16,record,sizeof(record));
 }
 void HelioBridge::learning_reference_(const uint8_t *raw,size_t size,uint32_t now) {
+  if(remote_.owner)return;
   if(!learning_||!learning_enabled_||!learning_handle_)return;
   for(size_t at=0;at+sleep_data::RECORD_SIZE<=size;at+=sleep_data::RECORD_SIZE) {
     const auto *p=raw+at;const uint32_t midnight=protocol::read32(p+4);

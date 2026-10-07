@@ -106,6 +106,11 @@ time:
 
 text_sensor:
   - platform: template
+    name: Helio Controller Transport
+    entity_category: diagnostic
+    update_interval: 2s
+    lambda: return id(helio).controller_status();
+  - platform: template
     name: Helio Read Status
     id: helio_read_status
     entity_category: diagnostic
@@ -166,6 +171,16 @@ interval:
 
 select:
   - platform: template
+    id: helio_alarm_controller
+    name: Helio Alarm Controller
+    entity_category: config
+    options: [ESP32, Home Assistant]
+    lambda: |
+      return std::string(id(helio).controller_is_remote() ? "Home Assistant" : "ESP32");
+    set_action:
+      - lambda: id(helio).controller_owner(x == "Home Assistant");
+    update_interval: 2s
+  - platform: template
     id: helio_alarm_repeat
     name: Helio Alarm Repeat
     optimistic: true
@@ -178,9 +193,24 @@ select:
       - Weekends
 
 api:
-  # Keep the alarm controller running when Home Assistant is offline.
+  # Keep BLE transport and the last verified strap alarm alive during HA outages.
   reboot_timeout: 0s
   actions:
+    - action: helio_controller_alarm
+      variables:
+        command_id: int
+        epoch: int
+        expires: int
+        previous: int
+        cancel: bool
+        follow: bool
+      then:
+        - lambda: id(helio).controller_alarm(command_id, epoch, expires, previous, cancel, follow);
+    - action: helio_controller_fast
+      variables:
+        expires: int
+      then:
+        - lambda: id(helio).controller_fast(expires);
     - action: helio_download_diagnostics
       variables:
         sequence: int

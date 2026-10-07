@@ -76,7 +76,7 @@ bool HelioBridge::save_score_() {
   return true;
 }
 void HelioBridge::score_activity_(const uint8_t *raw,size_t size,uint32_t start) {
-  if(quality_ && quality_handle_ && clock_ && clock_->utcnow().is_valid())
+  if(!remote_.owner && quality_ && quality_handle_ && clock_ && clock_->utcnow().is_valid())
     quality_->activity(raw,size,start,clock_->utcnow().timestamp);
 }
 void HelioBridge::score_audit_(const sleep_score::Night &n,uint32_t now) {
@@ -100,6 +100,7 @@ void HelioBridge::score_audit_(const sleep_score::Night &n,uint32_t now) {
   diagnostic_append_(19,audit,sizeof(audit));
 }
 void HelioBridge::score_reference_(const uint8_t *raw,size_t size,uint32_t now) {
+  if(remote_.owner)return;
   if(!quality_||!quality_handle_||size%sleep_data::RECORD_SIZE)return;
   bool audited=false;
   for(size_t at=0;at<size;at+=sleep_data::RECORD_SIZE) {

@@ -6,7 +6,9 @@ This is an **experimental, transparent index**, not a validated predictor of fel
 
 No daily ratings, daytime activity, morning-performance targets or always-on computer are required.
 
-The ESP32 stores first estimates, subsequent corrections and matching Helio scores, with model versions kept distinct.
+The selected controller stores first estimates, subsequent corrections and matching Helio scores, with model versions kept distinct.
+
+After handover, [the Home Assistant integration](home-assistant-controller.md) owns this calculation and imports all saved history; the ESP storage details below describe retained local mode.
 
 ## What changed from v1
 
@@ -139,11 +141,13 @@ The general relevance of regular timing and repeated short nights is described b
 
 ## Runtime, storage and display
 
-Home Assistant exposes **Helio Personal Sleep Score**, **Helio Personal Score Component Coverage**, **Helio Personal Score Status** and **Helio Personal Score Details**.
+In local mode Home Assistant exposes **Helio Personal Sleep Score**, **Helio Personal Score Component Coverage**, **Helio Personal Score Status** and **Helio Personal Score Details**.
+
+After handover use the integration’s **Experimental sleep score** and **Score coverage**, with full summaries kept in its private checkpoint.
 
 The screen currently shows only Helio's score, centered at its original 54-pixel size.
 
-Our experimental score is hidden from the screen while calculation, saved comparisons and eligible-night baseline updates continue automatically on the ESP32.
+Our experimental score is hidden from the screen while calculation, saved comparisons and eligible-night baseline updates continue automatically on the selected controller.
 
 Alarm scheduling and the stage-learning controller are unchanged.
 

@@ -21,6 +21,8 @@ struct ESPTime { uint32_t timestamp=1790938800; uint16_t year=2026; uint8_t mont
 struct Clock { ESPTime utcnow() { return {}; } };
 namespace text_sensor { struct TextSensor {void publish_state(const char*){}}; }
 class HelioBridge { public:
+ struct Remote {bool owner=false;} remote_;
+ bool remote_fast_() const {return false;}
  read_health::Health read_health_;
  bool smart_enabled_=false; smart_wake::Session smart_session_{};
  stage_model::Prediction model_prediction_{}; text_sensor::TextSensor *model_stage_sensor_=nullptr;

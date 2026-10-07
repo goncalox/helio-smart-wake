@@ -96,6 +96,8 @@ void HelioBridge::diagnostic_flush_() {
 }
 void HelioBridge::download_diagnostics(int sequence) {
   if (!diagnostic_handle_) { ESP_LOGI("helio_log", "HLG2 ERROR storage_unavailable"); return; }
+  if(sequence==-2){controller_snapshot_();return;}
+  if(sequence==-3){controller_export_(diagnostic_pending_,"HLP2",diagnostic_next_);return;}
   if (sequence < 0) {
     // A download only reads committed batches; it never changes an alarm or forces a flush.
     uint32_t first = diagnostic_next_;

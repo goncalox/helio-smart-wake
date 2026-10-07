@@ -45,6 +45,8 @@ namespace esphome::helio_bridge {
 struct Clock { struct T { uint32_t timestamp=1790852400; bool is_valid() const { return true; } }; T utcnow() { return {}; } };
 namespace text_sensor { struct TextSensor { void publish_state(const char*) {} }; }
 class HelioBridge { public:
+ void controller_snapshot_() {}
+ void controller_export_(const std::vector<uint8_t>&,const char*,uint32_t) {}
   enum class Phase { IDLE, SLEEP_DATA }; Phase phase_=Phase::IDLE; bool queued_alarm_=false;
   Clock *clock_=nullptr;
   void download_diagnostics(int);

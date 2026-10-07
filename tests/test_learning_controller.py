@@ -34,6 +34,7 @@ inline uint32_t millis(){return fake_ms;}
 '''+prefix+r'''
 namespace helio_bridge {
 struct HelioBridge {
+ struct Remote {bool owner=false;} remote_;
  enum class Phase {IDLE,BUSY}; Phase phase_=Phase::IDLE;bool queued_alarm_=false,smart_enabled_=true;
  static constexpr size_t DIAGNOSTIC_SLOTS=384;
  Clock clock;Clock *clock_=&clock;

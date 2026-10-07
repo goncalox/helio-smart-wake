@@ -28,3 +28,6 @@ backups/
 *.jsonl
 *.csv
 .DS_Store
+
+# Native controller is built for the HA host
+helio-engine

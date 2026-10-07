@@ -1,0 +1,3 @@
+activate:
+  name: Activate Home Assistant controller
+  description: Transfer decisions after validated state import and transport checks; the ESP32 stops local policy.

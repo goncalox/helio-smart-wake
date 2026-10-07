@@ -21,6 +21,7 @@ void HelioBridge::setup() {
   if (!alarm_pref_.load(&owned_) || owned_.valid != 1 || owned_.slot > 9 || owned_.hour > 23 ||
       owned_.minute > 59 || owned_.repeat > 127) owned_ = {};
   alarm_status_(owned_.valid ? "Checking saved alarm" : "No alarm set by bridge");
+  setup_remote_();
   setup_smart_();
   setup_learning_();
   setup_score_();
@@ -65,8 +66,8 @@ void HelioBridge::test_connection() { start_(Operation::TEST); }
 uint8_t HelioBridge::read_indicator(uint32_t now) const {
   const bool clock_ready = clock_ != nullptr && clock_->utcnow().is_valid();
   const uint32_t utc = clock_ready ? clock_->utcnow().timestamp : 0;
-  const bool frequent = clock_ready && ((smart_enabled_ && !smart_session_.finished &&
-      smart_wake::light_window(smart_session_, utc)) || follow_monitoring_(utc));
+  const bool frequent = remote_fast_() || (clock_ready && ((smart_enabled_ && !smart_session_.finished &&
+      smart_wake::light_window(smart_session_, utc)) || follow_monitoring_(utc)));
   // Poll cadence plus the existing 90-second read timeout.
   const uint32_t max_age = frequent ? 150000U : 390000U;
   const bool reading = operation_ == Operation::SLEEP && phase_ != Phase::IDLE &&
@@ -170,8 +171,10 @@ void HelioBridge::close_() {
 }
 void HelioBridge::loop() {
   diagnostic_tick_();
-  learning_tick_();
-  score_tick_();
+  if(!remote_.owner) {learning_tick_();score_tick_();}
+  if(remote_inflight_ && clock_ && clock_->utcnow().is_valid() && !remote::timely(remote_,clock_->utcnow().timestamp) && phase_!=Phase::ALARM_WRITE && phase_!=Phase::ALARM_VERIFY && phase_!=Phase::CLOSING) {
+    queued_alarm_=false;fail_("Remote command expired; existing alarm retained");
+  }
   const auto now = millis();
   if (phase_ == Phase::IDLE) {
     if (queued_alarm_) {
@@ -513,7 +516,7 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
   }
   if (operation_ == Operation::SET_ALARM && smart_operation_ && own != list.end() && (own->flags & 4) &&
       own->hour == requested_.hour && own->minute == requested_.minute && own->repeat == requested_.repeat &&
-      (follow_operation_ ? follow_.attempted : smart_session_.attempted) > clock_->utcnow().timestamp) {
+      (remote_inflight_ ? remote_.epoch : follow_operation_ ? follow_.attempted : smart_session_.attempted) > clock_->utcnow().timestamp) {
     alarm_status_("Alarm saved and verified by readback"); smart_result_(true); close_requested_ = true; return;
   }
   std::vector<uint8_t> command;
@@ -521,7 +524,8 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
     if (!smart_write_allowed_()) { smart_unsent_(); fail_("Smart alarm time too close or passed; existing alarm retained"); return; }
     // Once-only alarms may disappear after ringing; a different alarm in our slot is a manual override.
     const bool changed_slot = std::any_of(list.begin(), list.end(), [this](const alarms::Alarm &a) { return owned_.valid && a.slot == owned_.slot; });
-    if (smart_operation_ && smart_verified_epoch_() && own == list.end() && (!follow_operation_ || changed_slot)) {
+    if (smart_operation_ && smart_verified_epoch_() && own == list.end() && (!(remote_inflight_?remote_.follow:follow_operation_) || changed_slot)) {
+      if(remote_inflight_)remote_manual_();
       follow_.stopped = 1; follow_.cancel_pending = 0; save_follow_();
       smart_session_.finished = smart_session_.manual_override = 1;
       save_smart_();
@@ -551,6 +555,7 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
       return;
     }
     if (own == list.end()) {
+      if (remote_inflight_) remote_manual_();
       if (follow_operation_) {
         follow_.stopped = 1; follow_.cancel_pending = 0; save_follow_();
         follow_operation_ = smart_operation_ = false;

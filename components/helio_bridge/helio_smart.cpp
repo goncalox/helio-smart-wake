@@ -62,6 +62,7 @@ void HelioBridge::smart_publish_() {
   if (smart_awake_sensor_) smart_awake_sensor_->publish_state(smart_session_.awake_minutes);
 }
 void HelioBridge::smart_manual_override_() {
+  remote_manual_();
   follow_.stopped = 1; follow_.cancel_pending = 0;
   follow_operation_ = false;
   save_follow_();
@@ -77,6 +78,7 @@ void HelioBridge::smart_manual_override_() {
   smart_status_("Manual alarm control; smart wake paused until next evening");
 }
 void HelioBridge::smart_result_(bool success) {
+  if(remote_inflight_){remote_result_(success);return;}
   if (!smart_operation_) return;
   smart_operation_ = false;
   smart_new_attempt_ = false;
@@ -115,7 +117,9 @@ void HelioBridge::smart_result_(bool success) {
     smart_status_(smart_enabled_ ? "Previous smart alarm removed; sleep-based scheduling active" : "Smart wake off; alarm cancellation verified");
   } else {
     smart_session_.confirmed = smart_session_.attempted;
-    if (!smart_session_.finished && smart_session_.confirmed > now) {
+    // A verified write may be acknowledged just after its minute has passed.
+    if (!smart_session_.manual_override && smart_session_.finished != 2 &&
+        uint64_t(now) <= uint64_t(smart_session_.confirmed) + 120) {
       follow_ = {};
       follow_.night_start = smart_session_.night_start;
       follow_.primary = follow_.confirmed = follow_.attempted = smart_session_.confirmed;
@@ -128,6 +132,7 @@ void HelioBridge::smart_result_(bool success) {
   smart_publish_();
 }
 bool HelioBridge::smart_write_allowed_() {
+  if(remote_inflight_)return clock_ && clock_->utcnow().is_valid() && remote::timely(remote_,clock_->utcnow().timestamp);
   if (!smart_operation_ || operation_ != Operation::SET_ALARM) return true;
   const auto now = clock_->utcnow();
   const uint32_t candidate = follow_operation_ ? follow_.attempted : smart_session_.attempted;
@@ -136,7 +141,7 @@ bool HelioBridge::smart_write_allowed_() {
          candidate < uint64_t(now.timestamp) + 24 * 3600 - 60;
 }
 uint32_t HelioBridge::smart_verified_epoch_() const {
-  return follow_operation_ ? follow_.confirmed : smart_session_.confirmed;
+  return remote_inflight_ ? remote_.previous : follow_operation_ ? follow_.confirmed : smart_session_.confirmed;
 }
 bool HelioBridge::save_follow_() {
   if (!follow_pref_.save(&follow_) || !global_preferences->sync()) {
@@ -147,6 +152,7 @@ bool HelioBridge::save_follow_() {
   return true;
 }
 void HelioBridge::smart_unsent_() {
+  if(remote_inflight_)return;
   // Only discard a newly selected attempt. A retry/reboot may follow an uncertain write.
   if (!smart_operation_ || !smart_new_attempt_) return;
   if (follow_operation_) {
@@ -225,7 +231,7 @@ bool HelioBridge::tick_follow_(uint32_t now) {
 void HelioBridge::smart_observe_(const sleep_data::Snapshot &snapshot, uint32_t now) {
   smart_snapshot_ = snapshot;
   smart_read_at_ = now;
-  if (!smart_enabled_ || !smart_session_.session_end || smart_session_.finished || smart_session_.early_selected) return;
+  if (remote_.owner || !smart_enabled_ || !smart_session_.session_end || smart_session_.finished || smart_session_.early_selected) return;
   if (smart_session_.attempted && smart_session_.attempted != smart_session_.confirmed) return;
   if (!smart_wake::usable_onset(smart_session_, snapshot, now)) {
     smart_candidate_ = smart_candidate_since_ = 0;
@@ -252,6 +258,7 @@ void HelioBridge::smart_observe_(const sleep_data::Snapshot &snapshot, uint32_t 
   smart_publish_();
 }
 void HelioBridge::tick_smart(float hours, int early_minutes) {
+  if(remote_.owner){smart_status_("Home Assistant owns alarm decisions");return;}
   if (clock_ == nullptr || !clock_->utcnow().is_valid()) {
     smart_status_(smart_enabled_ ? "Waiting for clock synchronization" : "Smart wake off");
     return;

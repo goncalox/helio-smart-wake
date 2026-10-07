@@ -46,6 +46,11 @@ int main() {
  b.smart_new_attempt_=true;b.smart_operation_=true;b.operation_=HelioBridge::Operation::SET_ALARM;
  b.clock_->now+=8;assert(b.smart_write_allowed_());b.clock_->now+=13;assert(!b.smart_write_allowed_());b.smart_unsent_();b.ack(false);
  assert(b.smart_session_.attempted==at(10) && !b.smart_session_.early_selected);
+ // A delayed acknowledgement adopts the actual early alarm as the reminder origin.
+ b=armed();b.clock_->now=at(9,50);b.smart_session_.early_selected=1;b.smart_session_.attempted=at(9,51);
+ b.smart_operation_=true;b.operation_=HelioBridge::Operation::SET_ALARM;
+ b.clock_->now=at(9,51,20);b.smart_session_.finished=1;b.ack();assert(b.follow_.primary==at(9,51));
+ b.clock_->now=at(9,52,21);fresh(b,at(9,52));b.tick();assert(b.follow_.attempted==at(9,56));
  // Installing on a completed historical morning never creates reminders retroactively.
  reset();smart_wake::Session old;old.night_start=at(0)-6*3600;old.session_end=at(18);old.onset=at(1,30);old.finished=1;old.confirmed=old.attempted=at(10);
  persisted.assign((uint8_t*)&old,(uint8_t*)&old+sizeof(old));HelioBridge upgrade;upgrade.clock_->now=at(11);upgrade.setup_smart_();upgrade.smart_enabled_=true;fresh(upgrade,at(10,59));upgrade.tick();assert(!upgrade.writes && !upgrade.follow_.primary);

@@ -10,6 +10,7 @@
 #include "sleep_data.h"
 #include "activity_data.h"
 #include "smart_wake.h"
+#include "remote_control.h"
 #include "adaptive_model.h"
 #include "read_health.h"
 #include "sleep_score_model.h"
@@ -30,6 +31,11 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void set_status_sensor(text_sensor::TextSensor *sensor) { status_sensor_ = sensor; }
   void set_battery_sensor(sensor::Sensor *sensor) { battery_sensor_ = sensor; }
   void set_alarm_sensor(text_sensor::TextSensor *sensor) { alarm_sensor_ = sensor; }
+  bool controller_owner(bool home_assistant);
+  bool controller_is_remote() const {return remote_.owner;}
+  void controller_alarm(int id,int epoch,int expires,int previous,bool cancel,bool follow);
+  void controller_fast(int expires);
+  std::string controller_status() const;
   void test_connection();
   void set_alarm(int hour, int minute, int repeat);
   void cancel_alarm();
@@ -73,6 +79,17 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void set_smart_awake(sensor::Sensor *sensor) { smart_awake_sensor_ = sensor; }
   void set_sleep_awake(sensor::Sensor *sensor) { sleep_awake_sensor_ = sensor; }
  protected:
+  remote::State remote_{};
+  ESPPreferenceObject remote_pref_;
+  bool remote_inflight_{};
+  uint32_t remote_fast_until_{};
+  void setup_remote_();
+  bool save_remote_();
+  bool remote_fast_() const;
+  void remote_result_(bool);
+  void remote_manual_();
+  void controller_snapshot_();
+  void controller_export_(const std::vector<uint8_t>&,const char*,uint32_t);
   enum class Phase { IDLE, CONNECTING, NOTIFY, PUBLIC_KEY, PROOF, SERVICES, BATTERY, ALARMS, ALARM_WRITE, ALARM_VERIFY, SLEEP_START, SLEEP_DATA, SLEEP_ACK, ACTIVITY_START, ACTIVITY_DATA, ACTIVITY_ACK, CLOSING };
   enum class Operation { TEST, SET_ALARM, CANCEL_ALARM, SLEEP };
   struct Write { uint16_t handle; std::vector<uint8_t> data; };

@@ -18,7 +18,7 @@ bool HelioBridge::begin_activity_() {
   const uint32_t now_ms = millis();
   const bool early_window = smart_enabled_ && !smart_session_.finished &&
       smart_wake::light_window(smart_session_, clock_->utcnow().timestamp);
-  const uint32_t interval = early_window || follow_monitoring_(clock_->utcnow().timestamp) ? 60000 : 240000;
+  const uint32_t interval = remote_fast_() || early_window || follow_monitoring_(clock_->utcnow().timestamp) ? 60000 : 240000;
   if (queued_alarm_ || (activity_attempted_ && uint32_t(now_ms - activity_attempt_at_) < interval)) return false;
   model_prediction_ = {};
   if (model_stage_sensor_) model_stage_sensor_->publish_state("Waiting for activity read");
@@ -82,7 +82,7 @@ void HelioBridge::activity_control_(const std::vector<uint8_t> &data) {
     uint8_t observation[12] = {1, uint8_t(wear_.state), wear_.kind, wear_.heart_rate};
     protocol::write32(observation+4, wear_.sample); protocol::write32(observation+8, wear_.read_at);
     diagnostic_append_(13, observation, sizeof(observation));
-    update_model_(activity_transfer_.raw.data(), activity_transfer_.raw.size(), activity_transfer_.start_time);
+    if(!remote_.owner)update_model_(activity_transfer_.raw.data(), activity_transfer_.raw.size(), activity_transfer_.start_time);
     score_activity_(activity_transfer_.raw.data(),activity_transfer_.raw.size(),activity_transfer_.start_time);
     activity_transfer_.raw.clear();
     close_requested_ = true;

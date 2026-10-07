@@ -10,6 +10,7 @@ mock=mock.replace('#include "adaptive_model.h"','#include "sleep_score_model.h"'
 mock+=prefix+r'''
 namespace helio_bridge {
 struct HelioBridge {
+ struct Remote {bool owner=false;} remote_;
  enum class Phase {IDLE,BUSY};Phase phase_=Phase::IDLE;bool queued_alarm_=false,smart_enabled_=false,following=false;
  static constexpr size_t DIAGNOSTIC_SLOTS=384;
  std::array<uint32_t,DIAGNOSTIC_SLOTS> diagnostic_sequences_{};
