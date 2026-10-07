@@ -105,6 +105,12 @@ Never install a Mac executable on the Linux HA host.
 
 ## Explicit integration actions
 
+The automation reacts immediately to observation, receipt, connectivity and
+setting changes, with a once-per-minute clock fallback, HA startup recovery and
+a trigger at the verified saved alarm time.
+Its fallback reads HA's existing observations; it does not fetch strap data on
+every run.
+
 - `helio_smart_wake.set_alarm`: future dated `when` (Unix seconds or timestamp),
   stable `request_id`, optional caller `context`; returns `command_id` and receipt
   status. Times must be exact minutes, at least 30 seconds ahead and less than

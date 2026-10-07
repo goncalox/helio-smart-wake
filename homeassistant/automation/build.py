@@ -32,11 +32,18 @@ def instruction(kind, epoch, next_state, follow=False, cancel=False):
 def build():
     return {
         'id':'helio_smart_wake_routine_v2', 'alias':'Helio smart wake routine',
-        'description':'Owns wake decisions: stable sleep onset + 8.5h target with awake compensation, fresh aligned Light/Awake agreement, 30s buffer and 5min reminders while worn. The integration supplies data and executes explicit verified commands. No fixed wake deadline.',
+        'description':(
+            'Checks the latest Home Assistant sleep data when it changes, with a once-per-minute clock fallback.\n\n'
+            'After stable sleep onset, calculates wake time as onset + configured sleep duration + accepted awake minutes, then asks the integration to save and verify that future alarm.\n\n'
+            'Inside the early window, fresh aligned Light or Awake readings from both the strap and our model can select an earlier alarm, at least 30 seconds ahead rounded up to a minute, then lock it for the night.\n\n'
+            'Requests minute strap reads near waking; normal reads remain every five minutes.\n\n'
+            'After the alarm, schedules five-minute reminders while fresh data says the strap is worn, stopping and cancelling future reminders when removal is detected.\n\n'
+            'Manual alarm control pauses the night; switching smart wake off cancels a future owned alarm.\n\n'
+            'The integration supplies data and executes instructions; the strap rings its saved alarm independently, with no fixed wake deadline.'),
         'mode':'queued', 'max':10, 'max_exceeded':'silent',
         'triggers':[
             {'trigger':'state','entity_id':[OBS,COMMANDS,'binary_sensor.helio_smart_wake_bridge_connected',ENABLED,'number.helio_smart_wake_sleep_target','number.helio_smart_wake_wake_window']},
-            {'trigger':'time_pattern','seconds':'/10'},
+            {'trigger':'time_pattern','minutes':'/1','seconds':'0'},
             {'trigger':'homeassistant','event':'start'},
             {'trigger':'time','at':'sensor.helio_smart_wake_verified_alarm','id':'saved_wake_time'},
         ],
