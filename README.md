@@ -42,7 +42,7 @@ Other Zepp alarms are preserved, and explicit manual bridge controls remain.
 
 The ESP polls sleep normally every five minutes and activity at most every four
 minutes; HA can request a bounded minute-read lease near its chosen wake threshold.
-The configured timezone is `Europe/Lisbon`; edit `helio-test.yaml` for another zone.
+The configured timezone is `Europe/Lisbon`; edit `helio-bridge.yaml` for another zone.
 
 ## Setup
 
@@ -63,9 +63,9 @@ ESP32-S3-GEEK with its 2 MB quad PSRAM and onboard 135×240 display.
 8. Configure the separately maintained HA integration and wake automation, and
    leave **Helio Sleep Monitoring** enabled; the ESP32 cannot decide wake times.
 
-For an existing ESPHome device, keep its existing base configuration and secrets,
-copy `components/`, `helio-test.yaml` and any desired desktop tools, then include
-the package as shown in `helio-bridge.yaml`.
+For an existing ESPHome device, copy `components/` and any desired desktop tools,
+then adapt the single `helio-bridge.yaml` configuration while preserving the
+device's existing name, Wi-Fi settings, credentials and hardware configuration.
 Do not replace an existing API key or partition table just to use this source.
 
 Wi-Fi and internet access provide SNTP time after a cold boot; the clock does
@@ -244,8 +244,8 @@ Synthetic fixtures are included; private overnight recordings are not.
 ## Source layout
 
 - `components/helio_bridge/`: the complete deployed custom ESPHome component.
-- `helio-test.yaml`: display, controls, polling, SNTP and local component package.
-- `helio-bridge.yaml`: portable base configuration with secret references.
+- `helio-bridge.yaml`: complete firmware configuration with secret references,
+  including the display, controls, readings, SNTP and custom component.
 - `diagnostics/`: decoder, journal downloader, feature/model tools and frozen coefficients.
 - `tools/`: portable encrypted ESPHome API helper.
 - `tests/`: host regression tests and synthetic inference checks.

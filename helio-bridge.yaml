@@ -1,7 +1,14 @@
-# Copy secrets.example.yaml to secrets.yaml and replace every placeholder.
+# Complete Helio ESP32 firmware configuration.
 esphome:
   name: helio-bridge
   friendly_name: Helio Bridge
+  on_boot:
+    priority: -100
+    then:
+      - delay: 1s
+      - light.turn_on:
+          id: helio_screen_light
+          brightness: 10%
 
 esp32:
   variant: esp32s3
@@ -13,6 +20,42 @@ logger:
 api:
   encryption:
     key: !secret api_encryption_key
+  # Keep BLE transport and the last verified strap alarm alive during HA outages.
+  reboot_timeout: 0s
+  actions:
+    - action: helio_controller_alarm
+      variables:
+        command_id: int
+        epoch: int
+        expires: int
+        previous: int
+        cancel: bool
+        follow: bool
+      then:
+        - lambda: id(helio).controller_alarm(command_id, epoch, expires, previous, cancel, follow);
+    - action: helio_controller_fast
+      variables:
+        expires: int
+      then:
+        - lambda: id(helio).controller_fast(expires);
+    - action: helio_download_diagnostics
+      variables:
+        sequence: int
+      then:
+        - lambda: id(helio).download_diagnostics(sequence);
+    - action: helio_set_alarm
+      variables:
+        hour: int
+        minute: int
+        repeat_mask: int
+      then:
+        - lambda: id(helio).set_alarm(hour, minute, repeat_mask);
+    - action: helio_cancel_alarm
+      then:
+        - lambda: id(helio).cancel_alarm();
+    - action: helio_read_sleep
+      then:
+        - lambda: id(helio).read_sleep();
 
 ota:
   - platform: esphome
@@ -27,5 +70,329 @@ wifi:
 
 captive_portal:
 
-packages:
-  helio_connection_test: !include helio-test.yaml
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [helio_bridge]
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: true
+    interval: 320ms
+    window: 160ms
+
+ble_client:
+  - mac_address: !secret helio_bridge__helio_mac
+    id: helio_ble
+    auto_connect: true
+
+helio_bridge:
+  id: helio
+  ble_client_id: helio_ble
+  auth_key: !secret helio_bridge__helio_auth_key
+  status:
+    name: Helio Connection Test
+  battery:
+    id: helio_strap_battery
+    name: Helio Battery
+    on_value:
+      then:
+        - lambda: id(helio_battery_seen) = millis();
+  alarm_status:
+    name: Helio Alarm Status
+  time_id: helio_clock
+  diagnostic_status:
+    name: Helio Onboard Log Status
+  sleep_status:
+    name: Helio Sleep Data Status
+  sleep_stage:
+    name: Helio Last Recorded Sleep Stage
+  sleep_through:
+    name: Helio Sleep Data Through
+  sleep_onset:
+    name: Helio Recorded Sleep Start
+  sleep_sync:
+    name: Helio Last Sleep Read
+  sleep_changed:
+    name: Helio Sleep Record Last Changed
+  sleep_age:
+    name: Helio Sleep Data Age
+  sleep_duration:
+    name: Helio Recorded Sleep Duration
+  night_duration:
+    id: helio_night_sleep_duration
+    name: Helio Night Sleep Duration
+    on_value:
+      then:
+        - lambda: |-
+            if (std::isfinite(x)) id(helio_duration_seen) = millis();
+  sleep_records:
+    name: Helio Sleep Records Read
+  sleep_score:
+    id: helio_sleep_score
+    name: Helio Sleep Score
+    on_value:
+      then:
+        - lambda: |-
+            if (std::isfinite(x)) id(helio_score_seen) = millis();
+  personal_score:
+    name: Helio Personal Sleep Score
+  personal_score_coverage:
+    name: Helio Personal Score Component Coverage
+  personal_score_status:
+    name: Helio Personal Score Status
+  personal_score_details:
+    name: Helio Personal Score Details
+  learning_status:
+    name: Helio Model Learning Status
+  model_stage:
+    name: Helio Model Sleep Stage
+  smart_status:
+    name: Helio Smart Wake Status
+  smart_alarm:
+    name: Helio Smart Wake Saved Alarm
+  sleep_awake:
+    name: Helio Recorded Awake Time
+
+time:
+  - platform: sntp
+    id: helio_clock
+    timezone: Europe/Lisbon
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+      - 2.pool.ntp.org
+    on_time_sync:
+      then:
+        - lambda: |-
+            id(helio).diagnostic_event("NTP clock synchronized");
+            id(helio_clock_sync).publish_state(id(helio_clock).utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"));
+        - logger.log: "Helio clock synchronized directly via NTP"
+
+text_sensor:
+  - platform: template
+    name: Helio Controller Transport
+    entity_category: diagnostic
+    update_interval: 2s
+    lambda: return id(helio).controller_status();
+  - platform: template
+    name: Helio Read Status
+    id: helio_read_status
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: return std::string(id(helio).read_label(millis()));
+  - platform: template
+    name: Helio Strap Link
+    id: helio_strap_link
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: return std::string(id(helio).connection_label(millis()));
+  - platform: template
+    id: helio_clock_sync
+    name: Helio Last Clock Sync
+    device_class: timestamp
+    entity_category: diagnostic
+    update_interval: never
+
+datetime:
+  - platform: template
+    type: time
+    id: helio_alarm_time
+    name: Helio Alarm Time
+    optimistic: true
+    restore_value: true
+    initial_value: "07:00:00"
+
+select:
+  - platform: template
+    id: helio_alarm_controller
+    name: Helio Alarm Controller
+    entity_category: config
+    options: [Home Assistant]
+    lambda: |
+      return std::string("Home Assistant");
+    set_action:
+      - lambda: id(helio).controller_owner(x == "Home Assistant");
+    update_interval: 2s
+  - platform: template
+    id: helio_alarm_repeat
+    name: Helio Alarm Repeat
+    optimistic: true
+    restore_value: true
+    initial_option: Once
+    options:
+      - Once
+      - Every day
+      - Weekdays
+      - Weekends
+
+button:
+  - platform: template
+    name: Test Helio Connection
+    on_press:
+      - lambda: id(helio).test_connection();
+  - platform: template
+    name: Set Helio Alarm
+    on_press:
+      - lambda: |-
+          const auto repeat = id(helio_alarm_repeat).current_option();
+          const int mask = repeat == "Every day" ? 127 : repeat == "Weekdays" ? 31 : repeat == "Weekends" ? 96 : 0;
+          id(helio).set_alarm(id(helio_alarm_time).hour, id(helio_alarm_time).minute, mask);
+  - platform: template
+    name: Cancel Helio Alarm
+    on_press:
+      - lambda: id(helio).cancel_alarm();
+  - platform: template
+    name: Read Helio Sleep Data
+    on_press:
+      - lambda: id(helio).read_sleep();
+
+switch:
+  - platform: template
+    name: Helio Model Learning
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(helio).set_learning_enabled(true);
+    turn_off_action:
+      - lambda: id(helio).set_learning_enabled(false);
+  - platform: template
+    name: Helio Automatic Model Updates
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(helio).set_learning_automatic(true);
+    turn_off_action:
+      - lambda: id(helio).set_learning_automatic(false);
+  - platform: template
+    name: Helio Sleep Monitoring
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(helio).set_sleep_monitoring(true);
+    turn_off_action:
+      - lambda: id(helio).set_sleep_monitoring(false);
+
+# Waveshare's onboard LCD in upright 135x240 portrait orientation.
+psram:
+  mode: quad
+  speed: 40MHz
+
+spi:
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+
+output:
+  - platform: ledc
+    id: helio_backlight_pwm
+    pin: GPIO7
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    id: helio_screen_light
+    name: Helio Screen Brightness
+    output: helio_backlight_pwm
+    gamma_correct: 1.0
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
+
+globals:
+  - id: helio_duration_seen
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: helio_score_seen
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: helio_battery_seen
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+
+font:
+  - file: "gfonts://Arimo@700"
+    id: helio_screen_label
+    size: 17
+    bpp: 4
+    glyphs: " ABCELOPRSTY"
+  - file: "gfonts://Arimo@700"
+    id: helio_screen_value
+    size: 54
+    bpp: 4
+    glyphs: "0123456789:-"
+  - file: "gfonts://Arimo@700"
+    id: helio_screen_duration_wide
+    size: 46
+    bpp: 4
+    glyphs: "0123456789:-"
+  - file: "gfonts://Arimo@700"
+    id: helio_screen_unit
+    size: 21
+    bpp: 4
+    glyphs: "%"
+  - file: "gfonts://Arimo@700"
+    id: helio_screen_status
+    size: 18
+    bpp: 4
+    glyphs: " ADEFGIKLNORTW"
+
+display:
+  - platform: mipi_spi
+    model: WAVESHARE-ESP32-S3-GEEK
+    id: helio_screen
+    rotation: 180
+    color_depth: 16
+    update_interval: 5s
+    lambda: |-
+      const uint32_t now = millis();
+      const Color grey(170, 175, 182), white(245, 245, 245), black(0, 0, 0), divider(65, 69, 75);
+      const auto read = id(helio).read_indicator(now);
+      const Color read_color = read == 2 ? Color(93, 207, 154) : read == 1 ? Color(102, 173, 235) :
+          read == 0 ? Color(234, 180, 79) : read == 3 ? Color(245, 104, 92) : grey;
+      const char *read_text = read == 2 ? "READ OK" : read == 1 ? "READING" :
+          read == 3 ? "READ FAIL" : read == 4 ? "READ OFF" : "WAITING";
+      it.filled_rectangle(0, 0, 135, 24, read_color);
+      it.print(67, 18, id(helio_screen_status), black, TextAlign::BASELINE_CENTER, read_text);
+
+      it.print(67, 44, id(helio_screen_label), grey, TextAlign::BASELINE_CENTER, "BATTERY");
+      const bool battery_known = id(helio_strap_battery).has_state() && std::isfinite(id(helio_strap_battery).state);
+      const float battery = battery_known ? id(helio_strap_battery).state : 0;
+      const bool battery_fresh = battery_known && uint32_t(now - id(helio_battery_seen)) < 900000U;
+      const Color battery_color = !battery_fresh ? grey : battery <= 10 ? Color(245, 85, 75) :
+          battery <= 20 ? Color(240, 180, 70) : white;
+      char battery_text[8];
+      if (battery_known) snprintf(battery_text, sizeof(battery_text), "%.0f", battery);
+      else snprintf(battery_text, sizeof(battery_text), "--");
+      int number_width, unit_width, x_offset, baseline, height;
+      id(helio_screen_value).measure(battery_text, &number_width, &x_offset, &baseline, &height);
+      id(helio_screen_unit).measure("%", &unit_width, &x_offset, &baseline, &height);
+      const int battery_left = (135 - number_width - 3 - unit_width) / 2;
+      it.print(battery_left, 91, id(helio_screen_value), battery_color, TextAlign::BASELINE_LEFT, battery_text);
+      it.print(battery_left + number_width + 3, 91, id(helio_screen_unit), grey, TextAlign::BASELINE_LEFT, "%");
+
+      it.line(7, 96, 127, 96, divider);
+      it.print(67, 116, id(helio_screen_label), grey, TextAlign::BASELINE_CENTER, "SLEEP SCORE");
+      const bool score_known = id(helio_sleep_score).has_state() && std::isfinite(id(helio_sleep_score).state);
+      const bool score_fresh = score_known && uint32_t(now - id(helio_score_seen)) < 900000U;
+      if (score_known) it.printf(67, 163, id(helio_screen_value), score_fresh ? white : grey,
+                                 TextAlign::BASELINE_CENTER, "%.0f", id(helio_sleep_score).state);
+      else it.print(67, 163, id(helio_screen_value), grey, TextAlign::BASELINE_CENTER, "--");
+
+      it.line(7, 168, 127, 168, divider);
+      it.print(67, 188, id(helio_screen_label), grey, TextAlign::BASELINE_CENTER, "TOTAL SLEEP");
+      const bool duration_known = id(helio_night_sleep_duration).has_state() &&
+          std::isfinite(id(helio_night_sleep_duration).state);
+      const bool duration_fresh = duration_known && uint32_t(now - id(helio_duration_seen)) < 900000U;
+      if (duration_known) {
+        const int minutes = int(std::lround(id(helio_night_sleep_duration).state));
+        auto *duration_font = minutes >= 600 ? id(helio_screen_duration_wide) : id(helio_screen_value);
+        it.printf(67, 235, duration_font, duration_fresh ? white : grey, TextAlign::BASELINE_CENTER,
+                  "%d:%02d", minutes / 60, minutes % 60);
+      } else {
+        it.print(67, 235, id(helio_screen_duration_wide), grey, TextAlign::BASELINE_CENTER, "--:--");
+      }
