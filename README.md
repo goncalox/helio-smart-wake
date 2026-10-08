@@ -74,6 +74,42 @@ The API disconnection reboot timer is disabled.
 The strap must be within Bluetooth range when reading or changing its alarm.
 Alarm times use the strap's existing local clock; this component does not set it.
 
+## Home Assistant firmware maintenance
+
+Firmware can be built in Home Assistant's ESPHome Device Builder through an
+existing authenticated SSH account, without a browser session or the Mac
+ESPHome application.
+`tools/device_builder.py` invokes a companion client inside the existing SSH app;
+`tools/device_builder_local.py` connects only to Device Builder's loopback interface.
+This keeps app authentication, private ports and SSH protection mode unchanged.
+It does not require TCP forwarding or an additional Home Assistant integration.
+
+Install `requirements-maintenance.txt` into a separate local environment.
+Place `tools/device_builder_local.py` at
+`/config/helio_maintenance/device_builder_local.py` on HA, with `websocket-client`
+available to the SSH app's Python (a persistent `vendor/` directory beside the
+client is supported).
+The existing SSH app must share the host network so loopback reaches Device Builder.
+Store the SSH connection options privately in JSON (`host`, `username`, `port`
+and `password` or `key_filename`), and supply a verified SSH `known_hosts` file.
+Unknown or changed server keys are rejected.
+Read the ESPHome app's current `ingress_port` from Home Assistant Supervisor app
+information; it is an internal port and must not be exposed on the LAN.
+
+```sh
+python tools/device_builder.py compile \
+  --ssh-config /private/path/ssh.json \
+  --known-hosts /private/path/known_hosts \
+  --port INGRESS_PORT
+```
+
+`status` reports device availability; `compile` builds without flashing.
+An explicit `upload --device ESP32_ADDRESS` installs already-built firmware.
+Build logs remain private at `/config/helio_maintenance/device-builder-job.log`.
+An exit code of zero confirms completion; an interrupted stream does not.
+Jobs persist in Device Builder, so inspect its task panel/log before retrying an
+interrupted build or upload.
+
 ## Controls and display
 
 Home Assistant exposes battery, connection, sleep freshness, clock sync,
@@ -248,6 +284,7 @@ Synthetic fixtures are included; private overnight recordings are not.
   including the display, controls, readings, SNTP and custom component.
 - `diagnostics/`: decoder, journal downloader, feature/model tools and frozen coefficients.
 - `tools/`: portable encrypted ESPHome API helper.
+- `tools/device_builder*.py`: authenticated SSH maintenance clients for HA builds/uploads.
 - `tests/`: host regression tests and synthetic inference checks.
 
 ## References and attribution
