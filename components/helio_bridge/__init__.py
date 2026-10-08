@@ -42,8 +42,6 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Required("model_stage"): text_sensor.text_sensor_schema(),
     cv.Required("smart_status"): text_sensor.text_sensor_schema(),
     cv.Required("smart_alarm"): text_sensor.text_sensor_schema(device_class="timestamp"),
-    cv.Required("smart_target"): text_sensor.text_sensor_schema(device_class="timestamp"),
-    cv.Required("smart_awake"): sensor.sensor_schema(unit_of_measurement="min", accuracy_decimals=0, state_class="measurement"),
     cv.Required("sleep_awake"): sensor.sensor_schema(unit_of_measurement="min", accuracy_decimals=0, state_class="measurement"),
 }).extend(cv.COMPONENT_SCHEMA).extend(ble_client.BLE_CLIENT_SCHEMA)
 
@@ -59,7 +57,7 @@ async def to_code(config):
     cg.add(var.set_clock(await cg.get_variable(config["time_id"])))
     for key in ("sleep_status", "sleep_stage", "sleep_through", "sleep_onset", "sleep_sync", "sleep_changed"):
         cg.add(getattr(var, f"set_{key}")(await text_sensor.new_text_sensor(config[key])))
-    for key in ("sleep_age", "sleep_duration", "sleep_records", "smart_awake", "sleep_awake"):
+    for key in ("sleep_age", "sleep_duration", "sleep_records", "sleep_awake"):
         cg.add(getattr(var, f"set_{key}")(await sensor.new_sensor(config[key])))
     for key in ("personal_score", "personal_score_coverage"):
         if key in config:
@@ -73,5 +71,5 @@ async def to_code(config):
         cg.add(var.set_sleep_score(await sensor.new_sensor(config["sleep_score"])))
     if "night_duration" in config:
         cg.add(var.set_night_duration(await sensor.new_sensor(config["night_duration"])))
-    for key in ("model_stage", "smart_status", "smart_alarm", "smart_target"):
+    for key in ("model_stage", "smart_status", "smart_alarm"):
         cg.add(getattr(var, f"set_{key}")(await text_sensor.new_text_sensor(config[key])))

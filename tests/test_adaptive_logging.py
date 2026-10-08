@@ -28,7 +28,7 @@ struct HelioBridge {
 }
 '''
 (build/'mock.h').write_text(mock)
-s=(root/'helio_model.cpp').read_text();s=s[s.index('void HelioBridge::update_model_'):s.index('void HelioBridge::log_early_gate_')]
+s=(root/'helio_model.cpp').read_text();s=s[s.index('void HelioBridge::update_model_'):s.rindex('}  // namespace')]
 (build/'production.cpp').write_text('#include "mock.h"\nnamespace esphome::helio_bridge {\n'+s+'}\n')
 (build/'test.cpp').write_text(r'''#include "production.cpp"
 #include <cassert>

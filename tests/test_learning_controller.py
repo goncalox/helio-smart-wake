@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 root=Path('components/helio_bridge');build=Path('.test-build/learning-tests');build.mkdir(parents=True,exist_ok=True)
 h=(root/'helio_bridge.h').read_text();members=h[h.index('  adaptive::Learner *learning_'):h.index('  stage_model::Prediction model_prediction_')]
-prefix=Path('tests/smart-harness/fake_bridge.h').read_text().split('namespace helio_bridge {')[0]
+prefix=Path('tests/transport-harness/fake_bridge.h').read_text().split('namespace helio_bridge {')[0]
 mock=r'''#pragma once
 #include "adaptive_model.h"
 #include <cstdlib>
@@ -99,5 +99,5 @@ int main() {
  std::cout<<"Production learning: NVS restart, atomic failure, activation rollback, BLE/live-sleep priority, controls, storage reserve, CRC rejection and memory fallback passed\n";
 }
 ''')
-subprocess.run(['c++','-std=c++17','-I'+str(root),'-Itests/smart-harness',str(build/'test.cpp'),'-o',str(build/'test')],check=True)
+subprocess.run(['c++','-std=c++17','-I'+str(root),'-Itests/transport-harness',str(build/'test.cpp'),'-o',str(build/'test')],check=True)
 subprocess.run([str(build/'test')],check=True)

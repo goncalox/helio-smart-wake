@@ -67,16 +67,12 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void set_personal_score_details(text_sensor::TextSensor *sensor) { personal_score_details_sensor_=sensor; }
   void set_score_target(float hours);
   float displayed_personal_score() const;
-  void set_smart_enabled(bool enabled) { smart_enabled_ = enabled; }
-  void tick_smart(float hours, int early_minutes);
   void set_learning_enabled(bool value) {learning_enabled_=value;learning_publish_();}
   void set_learning_automatic(bool value) {learning_automatic_=value;learning_publish_();}
   void set_learning_status(text_sensor::TextSensor *sensor) {learning_status_sensor_=sensor;}
   void set_model_stage(text_sensor::TextSensor *sensor) { model_stage_sensor_ = sensor; }
   void set_smart_status(text_sensor::TextSensor *sensor) { smart_status_sensor_ = sensor; }
   void set_smart_alarm(text_sensor::TextSensor *sensor) { smart_alarm_sensor_ = sensor; }
-  void set_smart_target(text_sensor::TextSensor *sensor) { smart_target_sensor_ = sensor; }
-  void set_smart_awake(sensor::Sensor *sensor) { smart_awake_sensor_ = sensor; }
   void set_sleep_awake(sensor::Sensor *sensor) { sleep_awake_sensor_ = sensor; }
  protected:
   remote::State remote_{};
@@ -121,7 +117,6 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   uint32_t diagnostic_export_sequence_{0}, diagnostic_export_at_{0};
   size_t diagnostic_export_offset_{0}, diagnostic_used_{0};
   text_sensor::TextSensor *diagnostic_status_sensor_{nullptr};
-  smart_wake::Session diagnostic_last_session_{};
   bool diagnostic_have_session_{false};
   void diagnostic_setup_();
   void diagnostic_tick_();
@@ -174,25 +169,16 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   stage_model::Prediction model_prediction_{};
   text_sensor::TextSensor *model_stage_sensor_{nullptr};
   void update_model_(const uint8_t *raw, size_t size, uint32_t start);
-  void log_early_gate_(uint32_t now, uint32_t desired);
-  uint32_t gate_logged_through_{0}, gate_logged_model_read_{0}, gate_logged_target_{0}, gate_logged_desired_{0};
-  uint8_t gate_logged_flags_{255};
   sleep_data::Snapshot smart_snapshot_{};
   smart_wake::Session smart_session_{};
   ESPPreferenceObject smart_pref_, follow_pref_;
   smart_wake::FollowUp follow_{};
   smart_wake::Wear wear_{};
-  bool follow_operation_{false}, smart_new_attempt_{false};
-  bool save_follow_();
-  bool tick_follow_(uint32_t now);
-  bool follow_monitoring_(uint32_t now) const;
-  void stop_follow_();
-  void smart_unsent_();
   uint32_t smart_verified_epoch_() const;
-  text_sensor::TextSensor *smart_status_sensor_{nullptr}, *smart_alarm_sensor_{nullptr}, *smart_target_sensor_{nullptr};
-  sensor::Sensor *smart_awake_sensor_{nullptr}, *sleep_awake_sensor_{nullptr};
-  bool smart_enabled_{false}, smart_dispatch_{false}, smart_operation_{false};
-  uint32_t smart_read_at_{0}, smart_read_attempt_at_{0}, smart_candidate_{0}, smart_candidate_since_{0}, smart_retry_at_{0};
+  text_sensor::TextSensor *smart_status_sensor_{nullptr}, *smart_alarm_sensor_{nullptr};
+  sensor::Sensor *sleep_awake_sensor_{nullptr};
+  bool smart_dispatch_{false}, smart_operation_{false};
+  uint32_t smart_read_at_{0}, smart_read_attempt_at_{0};
   std::string smart_message_;
   alarms::Owned owned_{}, requested_{};
   ESPPreferenceObject alarm_pref_;
@@ -211,7 +197,6 @@ class HelioBridge : public Component, public ble_client::BLEClientNode {
   void finish_sleep_();
   void update_sleep_age_();
   void setup_smart_();
-  bool save_smart_();
   void smart_status_(const char *message);
   void smart_manual_override_();
   void smart_result_(bool success);

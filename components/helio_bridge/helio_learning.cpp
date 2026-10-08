@@ -93,7 +93,7 @@ void HelioBridge::learning_publish_() {
 }
 void HelioBridge::learning_observe_(const stage_model::Prediction &base) {
   if(!learning_||!learning_handle_)return;
-  if(learning_enabled_ && smart_enabled_ && !smart_session_.finished)learning_->observe(learning_night_(base.sample_time),base);
+  if(learning_enabled_ && !remote_.owner)learning_->observe(learning_night_(base.sample_time),base);
   const auto candidate=learning_->shadow(base),champion=learning_->predict(base);
   uint8_t record[20]={1,champion.stage,candidate.stage,uint8_t(base.valid)};
   protocol::write32(record+4,base.sample_time);protocol::write32(record+8,learning_->state.champion_version);

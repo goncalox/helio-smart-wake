@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 root=Path('components/helio_bridge');build=Path('.test-build/score-tests');build.mkdir(parents=True,exist_ok=True)
 h=(root/'helio_bridge.h').read_text();members=h[h.index('  sleep_score::Model *quality_'):h.index('  adaptive::Learner *learning_')]
-prefix=Path('tests/smart-harness/fake_bridge.h').read_text().split('namespace helio_bridge {')[0]
+prefix=Path('tests/transport-harness/fake_bridge.h').read_text().split('namespace helio_bridge {')[0]
 learning=Path('tests/test_learning_controller.py').read_text()
 mock=learning[learning.index("mock=r'''")+len("mock=r'''"):learning.index("'''+prefix")]
 mock=mock.replace('#include "adaptive_model.h"','#include "sleep_score_model.h"').replace('inline bool fail_write=', 'inline bool fail_open=false;\ninline bool fail_write=').replace('inline int nvs_open(const char *name,int,unsigned *h){','inline int nvs_open(const char *name,int,unsigned *h){if(fail_open)return 1;')
@@ -20,7 +20,7 @@ struct HelioBridge {
  void diagnostic_text_(int,const char*){}
  void diagnostic_append_(int k,const uint8_t *p,size_t n){assert(k==19);audit_records++;audit.assign(p,p+n);}
  bool diagnostic_evict_(){evictions++;free_entries+=1000;return evictions<384;}
- bool follow_monitoring_(uint32_t) const{return following;}
+ bool remote_fast_() const{return following;}
  void set_score_target(float);
  float displayed_personal_score() const;
  sleep_data::Transfer sleep_transfer_;

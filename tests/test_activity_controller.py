@@ -22,7 +22,7 @@ struct Clock { ESPTime utcnow() { return {}; } };
 namespace text_sensor { struct TextSensor {void publish_state(const char*){}}; }
 class HelioBridge { public:
  struct Remote {bool owner=false;} remote_;
- bool remote_fast_() const {return false;}
+ bool fast=false; bool remote_fast_() const {return fast;}
  read_health::Health read_health_;
  bool smart_enabled_=false; smart_wake::Session smart_session_{};
  stage_model::Prediction model_prediction_{}; text_sensor::TextSensor *model_stage_sensor_=nullptr;
@@ -63,9 +63,8 @@ int main() {
  a.activity_control_({16,3,1}); assert(a.recorded.size()==25 && a.close_requested_ && a.model_calls==1 && a.score_calls==1);
  assert(a.read_health_.activity.seen && !a.read_health_.activity.failed);
  assert(!a.begin_activity_()); // At most every four minutes, even if sleep polls faster.
- a.smart_enabled_=true;a.smart_session_.onset=a.clock_->utcnow().timestamp-8*3600;a.smart_session_.settings.early_minutes=30;
- fake_ms+=61000;assert(a.begin_activity_()); // Model reads refresh every minute in the early window.
- a.smart_enabled_=false;a.following=true;fake_ms+=61000;assert(a.begin_activity_()); // Post-alarm worn monitoring also refreshes every minute.
+ a.fast=true;fake_ms+=61000;assert(a.begin_activity_()); // Only an HA lease requests minute activity reads.
+ a.fast=false;fake_ms+=61000;assert(!a.begin_activity_()); // No automatic early-window/follow-up polling.
  HelioBridge b; assert(b.begin_activity_()); b.activity_control_(header);
  data[0]=1; b.activity_bulk_(data,9); assert(b.recorded.empty() && b.model_calls==0 && b.score_calls==0 && b.phase_==HelioBridge::Phase::CLOSING);
  assert(b.read_health_.activity.failed && !b.read_health_.activity.seen);

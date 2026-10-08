@@ -156,7 +156,7 @@ void HelioBridge::score_tick_() {
   const uint32_t ms=millis(),now=clock_->utcnow().timestamp;
   if(int32_t(ms-quality_publish_at_)>=0){quality_publish_at_=ms+60000;score_publish_();}
   // Flash work stays outside the alarm window and worn follow-up period.
-  if((smart_enabled_ && !smart_session_.finished && smart_wake::light_window(smart_session_,now)) || follow_monitoring_(now))return;
+  if(remote_fast_())return;
   if(quality_replay_seq_){score_replay_();return;}
   if(quality_->dirty && int32_t(ms-quality_flush_at_)>=0)save_score_();
 }

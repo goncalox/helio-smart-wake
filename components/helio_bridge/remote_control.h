@@ -3,7 +3,7 @@
 namespace esphome::helio_bridge::remote {
 enum Status : uint32_t { EMPTY, PENDING, VERIFIED, FAILED, EXPIRED, MANUAL };
 struct State {
-  uint32_t version{1}, owner{}, id{}, epoch{}, expires{}, previous{}, status{}, cancel{}, follow{}, manual{};
+  uint32_t version{1}, owner{1}, id{}, epoch{}, expires{}, previous{}, status{}, cancel{}, follow{}, manual{};
 };
 static_assert(sizeof(State)==40);
 inline bool valid(const State &s) {

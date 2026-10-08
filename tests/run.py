@@ -13,33 +13,26 @@ COMPONENT = ROOT / 'components/helio_bridge'
 def run(*args):
     subprocess.run(list(args), check=True)
 
-for name in ('protocol', 'alarms', 'sleep', 'activity', 'smart', 'dual_light', 'follow', 'adaptive', 'read_health', 'sleep_score', 'remote'):
+for name in ('protocol', 'alarms', 'sleep', 'activity', 'adaptive', 'read_health', 'sleep_score', 'remote'):
     output = BUILD / name
     run('c++', '-std=c++17', '-I' + str(COMPONENT),
         str(ROOT / f'tests/test_{name}.cpp'), '-o', str(output))
     run(str(output))
 
-# Compile the actual controller against the test clock/persistence/BLE mocks.
-smart = ROOT / 'tests/smart-harness'
-production = (COMPONENT / 'helio_smart.cpp').read_text()
-production = production.replace('#include "helio_bridge.h"', '#include "fake_bridge.h"')
-production = production.replace('#include "esphome/core/log.h"', '')
-controller = BUILD / 'smart-controller.cpp'
-controller.write_text(production)
-run('c++', '-std=c++17', '-I' + str(COMPONENT), '-I' + str(smart),
-    str(controller), str(smart / 'test_no_deadline.cpp'), '-o', str(BUILD / 'smart-controller'))
-run(str(BUILD / 'smart-controller'))
-run('c++', '-std=c++17', '-I' + str(COMPONENT), '-I' + str(smart),
-    str(controller), str(smart / 'test_follow.cpp'), '-o', str(BUILD / 'follow-controller'))
-run(str(BUILD / 'follow-controller'))
-bridge=(COMPONENT / 'helio_bridge.cpp').read_text()
-alarms=BUILD / 'alarm-controller.cpp'
-alarms.write_text('#include "fake_bridge.h"\nnamespace esphome::helio_bridge {\n' +
-                  bridge[bridge.index('void HelioBridge::request_alarms_'):])
-run('c++', '-std=c++17', '-I' + str(COMPONENT), '-I' + str(smart),
-    str(controller), str(alarms), str(smart / 'test_follow_alarms.cpp'), '-o', str(BUILD / 'follow-alarms'))
-run(str(BUILD / 'follow-alarms'))
-
+# Exercise actual HA command transport and owned-alarm readback with BLE/NVS mocks.
+harness = ROOT / 'tests/transport-harness'
+production = (COMPONENT / 'helio_transport.cpp').read_text()
+production = production.replace('#include "helio_bridge.h"', '#include "fake_bridge.h"').replace('#include "esphome/core/log.h"', '')
+remote = (COMPONENT / 'helio_remote.cpp').read_text()
+remote = remote[:remote.index('void HelioBridge::controller_snapshot_')]
+remote = remote.replace('#include "helio_bridge.h"', '#include "fake_bridge.h"').replace('#include "esphome/core/log.h"', '').replace('#include "esphome/core/hal.h"', '')
+controller = BUILD / 'transport-controller.cpp'
+controller.write_text(production + remote + '}\n')
+bridge = (COMPONENT / 'helio_bridge.cpp').read_text()
+alarms = BUILD / 'alarm-controller.cpp'
+alarms.write_text('#include "fake_bridge.h"\nnamespace esphome::helio_bridge {\n' + bridge[bridge.index('void HelioBridge::request_alarms_'):])
+run('c++', '-std=c++17', '-I'+str(COMPONENT), '-I'+str(harness), str(controller), str(alarms), str(harness/'test_transport.cpp'), '-o', str(BUILD/'transport-controller'))
+run(str(BUILD/'transport-controller'))
 
 # Compare B-163 public keys/shared secrets with independent OpenSSL results.
 run('cc', '-shared', '-fPIC', str(COMPONENT / 'ecdh.c'), '-o', str(BUILD / 'libhelio_ecdh.dylib'))

@@ -8,7 +8,7 @@ root = Path('.')
 
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('operation', choices=['inspect', 'test', 'sleep', 'set', 'cancel', 'smart-on', 'smart-off'])
+    parser.add_argument('operation', choices=['inspect', 'test', 'sleep', 'set', 'cancel'])
     parser.add_argument('--hour', type=int)
     parser.add_argument('--minute', type=int)
     parser.add_argument('--repeat', type=int, default=0)
@@ -44,9 +44,6 @@ async def main():
         elif args.operation == 'sleep':
             button = next(entity for entity in entities if entity.name == 'Read Helio Sleep Data')
             client.button_command(button.key)
-        elif args.operation in ('smart-on', 'smart-off'):
-            switch = next(entity for entity in entities if entity.name == 'Helio Smart Wake')
-            client.switch_command(switch.key, args.operation == 'smart-on')
         elif args.operation in ('set', 'cancel'):
             name = 'helio_set_alarm' if args.operation == 'set' else 'helio_cancel_alarm'
             service = next(service for service in services if service.name == name)

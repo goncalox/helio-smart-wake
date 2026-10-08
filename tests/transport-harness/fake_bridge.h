@@ -45,27 +45,28 @@ struct Clock { uint32_t now{}; ESPTime utcnow() {return ESPTime::from_epoch_utc(
 namespace helio_bridge {
 struct HelioBridge {
   remote::State remote_{};bool remote_inflight_{};
-  void remote_manual_() {if(remote_.owner)++remote_.manual;}
-  void remote_result_(bool) {}
+  ESPPreferenceObject remote_pref_;uint32_t remote_fast_until_{};
+  void remote_manual_(); void remote_result_(bool);
+  void setup_remote_();bool save_remote_();bool remote_fast_() const;
+  bool controller_owner(bool); void controller_fast(int);
+  std::string controller_status() const;
+  void controller_alarm(int,int,int,int,bool,bool);
 
   enum class Phase { IDLE, BUSY, ALARMS, ALARM_VERIFY, ALARM_WRITE }; enum class Operation { SET_ALARM, CANCEL_ALARM, TEST };
   Phase phase_{Phase::IDLE}; Operation operation_{};
   struct Parent {uint64_t get_address() {return 123;}} parent_value;
   Parent* parent() {return &parent_value;}
   Clock clock_value; Clock *clock_{&clock_value};
-  bool smart_enabled_{false}, smart_dispatch_{false}, smart_operation_{false}, queued_alarm_{false}, sleep_monitoring_{true};
+  bool smart_dispatch_{false}, smart_operation_{false}, queued_alarm_{false}, sleep_monitoring_{true};
   smart_wake::Session smart_session_{};
   stage_model::Prediction model_prediction_{};
-  void log_early_gate_(uint32_t,uint32_t) {}
   sleep_data::Snapshot smart_snapshot_{};
   ESPPreferenceObject smart_pref_, follow_pref_;
   smart_wake::FollowUp follow_{}; smart_wake::Wear wear_{};
-  bool follow_operation_{false}, smart_new_attempt_{false};
-  bool save_follow_(); bool tick_follow_(uint32_t); bool follow_monitoring_(uint32_t) const;
-  void stop_follow_(); void smart_unsent_(); uint32_t smart_verified_epoch_() const;
+  uint32_t smart_verified_epoch_() const;
   text_sensor::TextSensor *smart_status_sensor_{nullptr}, *smart_alarm_sensor_{nullptr}, *smart_target_sensor_{nullptr};
   sensor::Sensor *smart_awake_sensor_{nullptr};
-  uint32_t smart_read_at_{}, smart_read_attempt_at_{}, smart_candidate_{}, smart_candidate_since_{}, smart_retry_at_{};
+  uint32_t smart_read_at_{}, smart_read_attempt_at_{};
   std::string smart_message_;
   smart_wake::Session diagnostic_last_session_{}; bool diagnostic_have_session_=false;
   void diagnostic_text_(uint8_t,const char*) {}
@@ -87,9 +88,8 @@ struct HelioBridge {
   void cancel_alarm() {assert(smart_dispatch_);smart_operation_=true;operation_=Operation::CANCEL_ALARM;phase_=Phase::BUSY;cancels++;}
   void read_sleep() {reads++;smart_read_attempt_at_=clock_->now;}
   void ack(bool ok=true) {if(ok&&operation_==Operation::SET_ALARM)owned_=requested_;smart_result_(ok);phase_=Phase::IDLE;if(ok&&operation_==Operation::CANCEL_ALARM)owned_={};}
-  void setup_smart_(); bool save_smart_(); void smart_status_(const char*);void smart_publish_();void smart_manual_override_();void smart_result_(bool);bool smart_write_allowed_();
-  void smart_observe_(const sleep_data::Snapshot&,uint32_t);void tick_smart(float,int);
-  void tick() {tick_smart(8.5,15);}
+  void setup_smart_(); void smart_status_(const char*);void smart_publish_();void smart_manual_override_();void smart_result_(bool);bool smart_write_allowed_();
+  void smart_observe_(const sleep_data::Snapshot&,uint32_t);
 };
 }
 }

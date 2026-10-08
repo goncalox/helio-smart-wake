@@ -9,6 +9,7 @@ void HelioBridge::setup_remote_() {
   const auto address=parent()->get_address();
   remote_pref_=global_preferences->make_preference<remote::State>(0x48455231U ^ uint32_t(address) ^ uint32_t(address>>32));
   if(!remote_pref_.load(&remote_) || !remote::valid(remote_))remote_={};
+  if(!remote_.owner){remote_.owner=1;save_remote_();}
   if(remote_.status==remote::PENDING) {remote_.status=remote::FAILED;save_remote_();}
 }
 bool HelioBridge::save_remote_() {return remote_pref_.save(&remote_) && global_preferences->sync();}
@@ -21,19 +22,12 @@ void HelioBridge::controller_fast(int expires) {
   if(expires>=int(now) && uint64_t(expires)<=uint64_t(now)+120)remote_fast_until_=expires;
 }
 bool HelioBridge::controller_owner(bool home_assistant) {
-  if(phase_!=Phase::IDLE || queued_alarm_ || remote_inflight_)return false;
-  if(remote_.owner==uint32_t(home_assistant))return true;
-  // Switching back is explicit recovery; imported HA state is not silently reused by the ESP.
-  if(!home_assistant) {smart_manual_override_();remote_fast_until_=0;}
-  const auto old=remote_;remote_.owner=home_assistant;
-  if(!save_remote_()){remote_=old;return false;}
-  diagnostic_text_(8,home_assistant?"Alarm decisions now owned by Home Assistant":"Alarm decisions now owned by ESP32");
-  smart_status_(home_assistant?"Home Assistant owns alarm decisions":"ESP32 owns alarm decisions");
-  return true;
+  // Retained API compatibility for HA activation; ESP32 ownership is impossible.
+  return home_assistant && remote_.owner == 1;
 }
 std::string HelioBridge::controller_status() const {
   char text[240];
-  snprintf(text,sizeof(text),"{\"owner\":%u,\"id\":%u,\"epoch\":%u,\"status\":%u,\"previous\":%u,\"manual\":%u,\"idle\":%u}",
+  snprintf(text,sizeof(text),"{\"owner\":%u,\"id\":%u,\"epoch\":%u,\"status\":%u,\"previous\":%u,\"manual\":%u,\"idle\":%u,\"local_wake\":false}",
     unsigned(remote_.owner),unsigned(remote_.id),unsigned(remote_.epoch),unsigned(remote_.status),
     unsigned(remote_.previous),unsigned(remote_.manual),unsigned(phase_==Phase::IDLE && !queued_alarm_));
   return text;

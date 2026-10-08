@@ -16,9 +16,7 @@ void HelioBridge::activity_stop_(const char *reason, bool failed) {
 }
 bool HelioBridge::begin_activity_() {
   const uint32_t now_ms = millis();
-  const bool early_window = smart_enabled_ && !smart_session_.finished &&
-      smart_wake::light_window(smart_session_, clock_->utcnow().timestamp);
-  const uint32_t interval = remote_fast_() || early_window || follow_monitoring_(clock_->utcnow().timestamp) ? 60000 : 240000;
+  const uint32_t interval = remote_fast_() ? 60000 : 240000;
   if (queued_alarm_ || (activity_attempted_ && uint32_t(now_ms - activity_attempt_at_) < interval)) return false;
   model_prediction_ = {};
   if (model_stage_sensor_) model_stage_sensor_->publish_state("Waiting for activity read");

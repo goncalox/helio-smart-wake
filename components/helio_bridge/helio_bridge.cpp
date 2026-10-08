@@ -14,7 +14,7 @@ static const char *const TAG = "helio_bridge";
 
 void HelioBridge::setup() {
   diagnostic_setup_();
-  diagnostic_text_(8, "Early wake: Light/Awake; 30s buffer; five-minute worn follow-ups");
+  diagnostic_text_(8, "Home Assistant only: data acquisition and explicit alarm transport");
   this->parent()->set_enabled(false);
   const auto address = this->parent()->get_address();
   alarm_pref_ = global_preferences->make_preference<alarms::Owned>(0x48454c32U ^ uint32_t(address) ^ uint32_t(address >> 32));
@@ -65,9 +65,7 @@ const char *HelioBridge::connection_label(uint32_t now) const {
 void HelioBridge::test_connection() { start_(Operation::TEST); }
 uint8_t HelioBridge::read_indicator(uint32_t now) const {
   const bool clock_ready = clock_ != nullptr && clock_->utcnow().is_valid();
-  const uint32_t utc = clock_ready ? clock_->utcnow().timestamp : 0;
-  const bool frequent = remote_fast_() || (clock_ready && ((smart_enabled_ && !smart_session_.finished &&
-      smart_wake::light_window(smart_session_, utc)) || follow_monitoring_(utc)));
+  const bool frequent = remote_fast_();
   // Poll cadence plus the existing 90-second read timeout.
   const uint32_t max_age = frequent ? 150000U : 390000U;
   const bool reading = operation_ == Operation::SLEEP && phase_ != Phase::IDLE &&
@@ -151,8 +149,6 @@ void HelioBridge::fail_(const char *reason) {
     read_health_.sleep.failed = true;
     sleep_status_(reason);
   }
-  if (is_alarm_() && operation_ == Operation::SET_ALARM && phase_ != Phase::ALARM_WRITE && phase_ != Phase::ALARM_VERIFY)
-    smart_unsent_();
   if (is_alarm_()) smart_result_(false);
   close_();
 }
@@ -301,9 +297,7 @@ void HelioBridge::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t 
         contact_failed_ = true;
         status_("Helio disconnected before operation completed");
         if (is_alarm_()) alarm_status_("Helio disconnected; alarm not confirmed");
-        if (is_alarm_() && operation_ == Operation::SET_ALARM && phase_ != Phase::ALARM_WRITE && phase_ != Phase::ALARM_VERIFY)
-    smart_unsent_();
-  if (is_alarm_()) smart_result_(false);
+        if (is_alarm_()) smart_result_(false);
         if (operation_ == Operation::SLEEP) {
           read_health_.sleep.failed = true;
           sleep_status_("Helio disconnected; sleep read incomplete");
@@ -516,22 +510,19 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
   }
   if (operation_ == Operation::SET_ALARM && smart_operation_ && own != list.end() && (own->flags & 4) &&
       own->hour == requested_.hour && own->minute == requested_.minute && own->repeat == requested_.repeat &&
-      (remote_inflight_ ? remote_.epoch : follow_operation_ ? follow_.attempted : smart_session_.attempted) > clock_->utcnow().timestamp) {
+      remote_.epoch > clock_->utcnow().timestamp) {
     alarm_status_("Alarm saved and verified by readback"); smart_result_(true); close_requested_ = true; return;
   }
   std::vector<uint8_t> command;
   if (operation_ == Operation::SET_ALARM) {
-    if (!smart_write_allowed_()) { smart_unsent_(); fail_("Smart alarm time too close or passed; existing alarm retained"); return; }
+    if (!smart_write_allowed_()) { fail_("Requested alarm time too close or passed; existing alarm retained"); return; }
     // Once-only alarms may disappear after ringing; a different alarm in our slot is a manual override.
     const bool changed_slot = std::any_of(list.begin(), list.end(), [this](const alarms::Alarm &a) { return owned_.valid && a.slot == owned_.slot; });
-    if (smart_operation_ && smart_verified_epoch_() && own == list.end() && (!(remote_inflight_?remote_.follow:follow_operation_) || changed_slot)) {
+    if (smart_operation_ && smart_verified_epoch_() && own == list.end() && (!remote_.follow || changed_slot)) {
       if(remote_inflight_)remote_manual_();
-      follow_.stopped = 1; follow_.cancel_pending = 0; save_follow_();
-      smart_session_.finished = smart_session_.manual_override = 1;
-      save_smart_();
       smart_operation_ = false;
-      smart_status_("Alarm changed outside bridge; smart wake paused until next evening");
-      fail_("Alarm changed outside bridge; smart update stopped");
+      smart_status_("Alarm changed outside bridge; Home Assistant notified");
+      fail_("Alarm changed outside bridge; requested update stopped");
       return;
     }
     const int slot = alarms::choose_slot(list, owned_);
@@ -556,10 +547,6 @@ void HelioBridge::handle_alarms_(const std::vector<uint8_t> &data) {
     }
     if (own == list.end()) {
       if (remote_inflight_) remote_manual_();
-      if (follow_operation_) {
-        follow_.stopped = 1; follow_.cancel_pending = 0; save_follow_();
-        follow_operation_ = smart_operation_ = false;
-      }
       fail_("Alarm changed outside bridge; cancellation stopped"); return;
     }
     command = {5, 1, owned_.slot};
