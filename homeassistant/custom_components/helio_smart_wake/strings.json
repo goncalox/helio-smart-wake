@@ -1,1 +1,0 @@
-{"config":{"step":{"user":{"title":"Helio Smart Wake","description":"Select the ESPHome bridge; the controller starts in observation mode.","data":{"esphome_entry":"ESPHome bridge"}}},"abort":{"already_configured":"This bridge already has a controller."}}}

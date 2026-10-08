@@ -29,5 +29,11 @@ backups/
 *.csv
 .DS_Store
 
+# Home Assistant sources stay local, outside the firmware repository
+/homeassistant/
+/docs/home-assistant-controller.md
+/tests/test_ha_*.py
+/tests/test_automation_policy.py
+/tests/test_awake_automation.py
 # Native controller is built for the HA host
 helio-engine

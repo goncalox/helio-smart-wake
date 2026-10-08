@@ -4,14 +4,13 @@ ESPHome firmware for a Waveshare ESP32-S3-GEEK and Amazfit Helio Strap.
 
 The ESP32 authenticates over Bluetooth, reads sleep/activity summaries, saves
 alarms with readback verification, and displays battery, Helio score and duration.
-After an explicit handover, the Home Assistant custom integration supplies sleep
-observations, models, learning and durable alarm services; a native, UI-editable
-automation owns every wake decision: **Helio — Ready to get up** is currently
-enabled, and the retained **Helio — Smart wake** routine is disabled.
-The ESP32 provides BLE transport and never runs a second wake controller in this mode.
-Before handover, the retained local ESP32 controller operates as before.
+This repository contains ESP32 firmware, its configuration, documentation,
+diagnostic tools and firmware tests.
+Home Assistant integrations and automation configuration are maintained separately.
+The firmware supports explicit handover to Home Assistant; in that mode the ESP32
+provides BLE transport and never runs a second wake controller.
+The local controller behavior documented below applies to ESP32 ownership.
 Neither mode requires an always-on Mac.
-See [installation, migration and failure behaviour](docs/home-assistant-controller.md).
 Once successfully saved, an alarm runs on the strap itself.
 
 ## Personal sleep-quality score
@@ -28,21 +27,11 @@ The v2 upgrade preserves v1 scores and recovers available recent minute data fro
 the ESP32's existing logs; HA migration preserves the complete saved score history.
 See [formula, adaptation and comparison limits](docs/personal-sleep-score.md).
 
-## Wake behavior
+## Local ESP32 wake behavior
 
-The enabled **Helio — Ready to get up** routine sends one get-up cue only when
-complete fresh sleep records show at least **7h30 of sleep excluding awake
-minutes**, and either the strap **OR** our model explicitly says **Awake**.
-Light alone never qualifies; the model's Awake result is a prediction.
-It has no full-target fallback or repeating reminders, so it stays silent if no
-qualifying Awake reading arrives.
-The cue is saved at the next whole minute at least 30 seconds ahead (30–89 seconds
-after the decision), with readback verification handled by the integration.
-The configurable threshold is `input_number.helio_ready_to_get_up_sleep_hours`.
-Saved dated state prevents a second cue after restart or an uncertain write.
-
-The disabled **Helio — Smart wake** routine retains the original rules below;
-only one of these alternatives should be enabled at a time.
+These rules describe the retained controller when the ESP32 owns decisions.
+With Home Assistant ownership selected, external automations decide whether and
+when to request an alarm; these local wake rules are inactive.
 
 - Wait for stable night sleep onset: at least 90 minutes of recorded night data
   and two matching observations at least five minutes apart.
@@ -256,8 +245,7 @@ Model versions, candidate votes, evaluation counts and coefficient changes are l
 so reviews can distinguish baseline predictions from adaptive ones.
 Private learned weights and training records remain on the selected controller host,
 not in GitHub.
-See [Home Assistant controller](docs/home-assistant-controller.md) for HA storage,
-restart recovery and single ownership after migration.
+Home Assistant storage and automation configuration are outside this repository.
 
 The model remains one half of the existing early-wake gate: the strap must also
 report fresh, aligned Light/Awake inside the selected window.
@@ -281,8 +269,6 @@ Synthetic fixtures are included; private overnight recordings are not.
 - `helio-bridge.yaml`: portable base configuration with secret references.
 - `diagnostics/`: decoder, journal downloader, feature/model tools and frozen coefficients.
 - `tools/`: portable encrypted ESPHome API helper.
-- `homeassistant/custom_components/helio_smart_wake/`: observations, models and explicit durable alarm services.
-- `homeassistant/automation/`: native wake automation and its reproducible configuration builder.
 - `tests/`: host regression tests and synthetic inference checks.
 
 ## References and attribution

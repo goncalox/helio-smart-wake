@@ -8,7 +8,7 @@ No daily ratings, daytime activity, morning-performance targets or always-on com
 
 The selected controller stores first estimates, subsequent corrections and matching Helio scores, with model versions kept distinct.
 
-After handover, [the Home Assistant integration](home-assistant-controller.md) owns this calculation and imports all saved history; the ESP storage details below describe retained local mode.
+After handover, the separately maintained Home Assistant integration owns this calculation and imports all saved history; the ESP storage details below describe retained local mode.
 
 ## What changed from v1
 

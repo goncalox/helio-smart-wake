@@ -48,14 +48,4 @@ for script in ('test_ecdh.py', 'test_shadow.py', 'test_stage_model.py',
                'test_model_firmware_parity.py', 'test_score_controller.py'):
     run(sys.executable, str(ROOT / 'tests' / script))
 
-# HA native worker uses the same policy source with a process/transport adapter.
-run(sys.executable, str(ROOT/'homeassistant/native/build.py'))
-run('c++', '-std=c++17', '-O2', '-I'+str(COMPONENT), '-I'+str(ROOT/'homeassistant/native'),
-    str(BUILD/'helio-policy.cpp'), str(ROOT/'homeassistant/native/test_engine.cpp'), '-o', str(BUILD/'test-engine'))
-run(str(BUILD/'test-engine'))
-run(sys.executable, str(ROOT/'tests/test_ha_journal.py'))
-
-run(sys.executable, str(ROOT/'tests/test_ha_controller.py'))
-run(sys.executable, str(ROOT/'tests/test_automation_policy.py'))
-run(sys.executable, str(ROOT/'tests/test_awake_automation.py'))
-print('All host regression checks passed.')
+print('All firmware host regression checks passed.')
