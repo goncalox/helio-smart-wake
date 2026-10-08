@@ -6,7 +6,8 @@ The ESP32 authenticates over Bluetooth, reads sleep/activity summaries, saves
 alarms with readback verification, and displays battery, Helio score and duration.
 After an explicit handover, the Home Assistant custom integration supplies sleep
 observations, models, learning and durable alarm services; a native, UI-editable
-**Helio smart wake routine** automation owns every wake decision.
+automation owns every wake decision: **Helio — Ready to get up** is currently
+enabled, and the retained **Helio — Smart wake** routine is disabled.
 The ESP32 provides BLE transport and never runs a second wake controller in this mode.
 Before handover, the retained local ESP32 controller operates as before.
 Neither mode requires an always-on Mac.
@@ -28,6 +29,20 @@ the ESP32's existing logs; HA migration preserves the complete saved score histo
 See [formula, adaptation and comparison limits](docs/personal-sleep-score.md).
 
 ## Wake behavior
+
+The enabled **Helio — Ready to get up** routine sends one get-up cue only when
+complete fresh sleep records show at least **7h30 of sleep excluding awake
+minutes**, and either the strap **OR** our model explicitly says **Awake**.
+Light alone never qualifies; the model's Awake result is a prediction.
+It has no full-target fallback or repeating reminders, so it stays silent if no
+qualifying Awake reading arrives.
+The cue is saved at the next whole minute at least 30 seconds ahead (30–89 seconds
+after the decision), with readback verification handled by the integration.
+The configurable threshold is `input_number.helio_ready_to_get_up_sleep_hours`.
+Saved dated state prevents a second cue after restart or an uncertain write.
+
+The disabled **Helio — Smart wake** routine retains the original rules below;
+only one of these alternatives should be enabled at a time.
 
 - Wait for stable night sleep onset: at least 90 minutes of recorded night data
   and two matching observations at least five minutes apart.

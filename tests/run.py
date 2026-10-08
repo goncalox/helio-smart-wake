@@ -57,4 +57,5 @@ run(sys.executable, str(ROOT/'tests/test_ha_journal.py'))
 
 run(sys.executable, str(ROOT/'tests/test_ha_controller.py'))
 run(sys.executable, str(ROOT/'tests/test_automation_policy.py'))
+run(sys.executable, str(ROOT/'tests/test_awake_automation.py'))
 print('All host regression checks passed.')

@@ -1,8 +1,10 @@
 # Home Assistant owns wake decisions
 
-The native **Helio smart wake routine** automation owns wake decisions on Home
-Assistant: target time, awake compensation, early Light/Awake agreement, safety
-buffer, reminders and removal/manual/disabled handling.
+Native Home Assistant automations own wake decisions.
+The active **Helio — Ready to get up** routine provides an Awake-only cue after
+7h30 of recorded sleep; the alternative **Helio — Smart wake** routine is disabled
+and retains target time, awake compensation, early Light/Awake agreement,
+safety buffer, reminders and removal/manual/disabled handling.
 The `helio_smart_wake` integration supplies sleep observations, stage inference,
 learning/validation, personal scoring and explicit durable alarm services.
 It cannot create an alarm from a sleep record, periodic update or model result.
@@ -80,6 +82,9 @@ Never install a Mac executable on the Linux HA host.
   dated primary time, early-selection lock, reminder state and manual generation.
   An accepted instruction stores a copy of caller state before BLE work, allowing
   the automation to recover a crash between service acceptance and helper update.
+- The alternative get-up cue uses its own restoring
+  `input_text.helio_awake_cue_session` helper and receipt context, so its single-cue
+  state cannot be confused with the original routine's primary/reminder state.
 - `/config/helio_history/<entry_id>/` stores the initial snapshot, lossless committed
   raw batches, the latest pending snapshot and daily command/error audit files.
   Changes in champion/candidate versions or validation counts also retain a full
@@ -104,6 +109,43 @@ Never install a Mac executable on the Linux HA host.
   A short fast-read lease permits minute activity refreshes only while HA requests it.
 
 ## Explicit integration actions
+
+### Ready to get up (currently enabled)
+
+Create `input_text.helio_awake_cue_session` with maximum 255 and no initial value,
+and `input_number.helio_ready_to_get_up_sleep_hours` with range 6–10, step 0.25,
+unit `h`, and no initial value; set its saved value to 7.5 after creation.
+Import `homeassistant/automation/helio-awake-after-rest.json` initially disabled.
+Disable the old routine before enabling this one; both use the same owned strap
+alarm slot, so run only one decision routine at a time.
+Both automations belong to the Sleep category, with bed/alarm icons respectively.
+
+The get-up routine requires a stable onset and complete, non-nap, fresh sleep
+records whose raw onset/awake minutes match the accepted values.
+Completed sleep equals the records' `through` time minus onset minus recorded
+awake minutes, not elapsed wall time; **7h30 exactly qualifies**.
+After that threshold, it accepts explicit **Awake (7)** from the strap **OR** a
+valid fresh model **Awake (7)** prediction aligned to those sleep records.
+Light (4), Deep (5) and REM (8) alone never qualify.
+The model's minute timestamp marks the start, while sleep `through` marks its end;
+alignment allows 60 seconds around `model_sample + 60`.
+Band records are at most 180 seconds old and acquired at most 90 seconds ago;
+the model branch also checks its own sample/acquisition freshness.
+Even a model-only Awake decision requires fresh sleep-duration records.
+
+Observation/receipt/connectivity/settings changes run the checks immediately,
+with a once-per-minute clock fallback and HA startup recovery.
+It requests minute reads from 15 minutes before the estimated threshold until
+a cue is accepted, without fetching on every state update.
+One accepted cue is saved for the next whole minute at least 30 seconds ahead.
+There is no full-target alarm, fixed deadline or repeating reminder.
+Saved helper and integration receipt state prevent duplicate cues after restart
+or an uncertain write; a manual alarm edit pauses that dated night.
+Turning the smart-wake switch off cancels this routine's own verified future cue.
+Data, model learning and scoring continue regardless of which automation is on.
+Only a later physical observation can confirm that a saved cue actually vibrated.
+
+### Smart wake (currently disabled)
 
 The automation reacts immediately to observation, receipt, connectivity and
 setting changes, with a once-per-minute clock fallback, HA startup recovery and

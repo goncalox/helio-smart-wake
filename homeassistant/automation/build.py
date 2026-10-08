@@ -31,7 +31,7 @@ def instruction(kind, epoch, next_state, follow=False, cancel=False):
 
 def build():
     return {
-        'id':'helio_smart_wake_routine_v2', 'alias':'Helio smart wake routine',
+        'id':'helio_smart_wake_routine_v2', 'alias':'Helio — Smart wake',
         'description':(
             'Checks the latest Home Assistant sleep data when it changes, with a once-per-minute clock fallback.\n\n'
             'After stable sleep onset, calculates wake time as onset + configured sleep duration + accepted awake minutes, then asks the integration to save and verify that future alarm.\n\n'

@@ -1,6 +1,6 @@
 {
   "id": "helio_smart_wake_routine_v2",
-  "alias": "Helio smart wake routine",
+  "alias": "Helio \u2014 Smart wake",
   "description": "Checks the latest Home Assistant sleep data when it changes, with a once-per-minute clock fallback.\n\nAfter stable sleep onset, calculates wake time as onset + configured sleep duration + accepted awake minutes, then asks the integration to save and verify that future alarm.\n\nInside the early window, fresh aligned Light or Awake readings from both the strap and our model can select an earlier alarm, at least 30 seconds ahead rounded up to a minute, then lock it for the night.\n\nRequests minute strap reads near waking; normal reads remain every five minutes.\n\nAfter the alarm, schedules five-minute reminders while fresh data says the strap is worn, stopping and cancelling future reminders when removal is detected.\n\nManual alarm control pauses the night; switching smart wake off cancels a future owned alarm.\n\nThe integration supplies data and executes instructions; the strap rings its saved alarm independently, with no fixed wake deadline.",
   "mode": "queued",
   "max": 10,
